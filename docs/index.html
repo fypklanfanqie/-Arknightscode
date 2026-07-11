@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arknights code — 明日方舟主题 Galgame AI 终端</title>
+<meta name="description" content="Arknights code 是一款自带完整 Galgame 界面的桌面 AI Agent。以明日方舟阿米娅等干员为主题形象，将 Claude Code CLI 封装为沉浸式视觉小说体验。支持 9 家 LLM 后端、角色立绘系统、BGM 场景切换。开源免费。">
+<meta name="keywords" content="Arknights code, 明日方舟, 阿米娅, AI Agent, Claude Code, Galgame, 桌面AI, Electron, 开源, LLM, DeepSeek, 视觉小说">
+<meta name="author" content="fypklanfanqie">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://fypklanfanqie.github.io/Arknightscode/">
+
+<meta property="og:title" content="Arknights code — 明日方舟主题 Galgame AI 终端">
+<meta property="og:description" content="自带完整 Galgame 界面的桌面 AI Agent，以明日方舟干员为主题形象，封装 Claude Code CLI 为沉浸式视觉小说体验。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://fypklanfanqie.github.io/Arknightscode/">
+<meta property="og:site_name" content="Arknights code">
+<meta property="og:locale" content="zh_CN">
+
+<style>
+  /* ========== Design Tokens ========== */
+  :root {
+    --bg-deep: #0a0e17;
+    --bg-card: rgba(18, 24, 40, 0.7);
+    --blue: #2eb8ff;
+    --blue-dim: rgba(46, 184, 255, 0.08);
+    --blue-border: rgba(46, 184, 255, 0.12);
+    --blue-border-hover: rgba(46, 184, 255, 0.3);
+    --orange: #ff8c42;
+    --text: #c8d6e5;
+    --text-muted: #7a8ea0;
+    --text-dim: #4a5d6e;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --section-gap: 80px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* ========== Reset & Base ========== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+    background: var(--bg-deep);
+    color: var(--text);
+    line-height: 1.75;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========== Grid BG ========== */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      linear-gradient(rgba(46,184,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46,184,255,0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 70%);
+  }
+
+  /* ========== Ambient Glow ========== */
+  .ambient {
+    position: fixed; pointer-events: none; z-index: 0;
+  }
+  .ambient-top {
+    top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 500px;
+    background: radial-gradient(ellipse, rgba(46,184,255,0.07) 0%, transparent 70%);
+  }
+  .ambient-bot {
+    bottom: 0; right: 0;
+    width: 500px; height: 400px;
+    background: radial-gradient(ellipse, rgba(255,140,66,0.04) 0%, transparent 70%);
+  }
+
+  /* ========== Nav ========== */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(10,14,23,0.82);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--blue-border);
+    transition: box-shadow 0.3s;
+  }
+  nav.scrolled { box-shadow: 0 2px 24px rgba(0,0,0,0.3); }
+  nav .nav-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; height: 56px;
+  }
+  .nav-logo {
+    font-size: 1.05rem; font-weight: 700; color: var(--blue);
+    text-decoration: none; letter-spacing: 0.5px;
+  }
+  .nav-links { display: flex; gap: 6px; list-style: none; align-items: center; }
+  .nav-links a {
+    color: var(--text-muted); text-decoration: none; font-size: 0.88rem;
+    padding: 7px 15px; border-radius: 20px; transition: all 0.2s;
+  }
+  .nav-links a:hover { color: var(--blue); background: var(--blue-dim); }
+  .nav-dl {
+    background: var(--blue) !important; color: #fff !important;
+    font-weight: 600 !important; padding: 8px 20px !important;
+  }
+  .nav-dl:hover { background: #1a8fd4 !important; color: #fff !important; }
+  @media (max-width: 640px) { .nav-links a:not(.nav-dl) { display: none; } }
+
+  /* ========== Container ========== */
+  .container { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ========== Section Headers ========== */
+  .section-label {
+    display: block; text-align: center; font-size: 0.8rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 3px; color: var(--orange); margin-bottom: 12px;
+  }
+  .section-title {
+    text-align: center; font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 750;
+    color: #e2eaf4; margin-bottom: 48px; letter-spacing: -0.3px;
+  }
+  .section-title span { color: var(--blue); }
+
+  /* ========== Hero ========== */
+  .hero {
+    position: relative; z-index: 2;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 100px 24px 80px;
+  }
+  .hero .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(46,184,255,0.08); border: 1px solid rgba(46,184,255,0.18);
+    color: var(--blue); font-size: 0.8rem; font-weight: 600;
+    padding: 5px 16px; border-radius: 20px; margin-bottom: 28px;
+    letter-spacing: 2px; animation: fadeUp 0.7s var(--ease) both;
+  }
+  .hero h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 850;
+    background: linear-gradient(135deg, #2eb8ff 0%, #7cd0ff 45%, #ff8c42 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 18px; letter-spacing: -1px; line-height: 1.15;
+    animation: fadeUp 0.7s var(--ease) 0.1s both;
+  }
+  .hero .subtitle {
+    font-size: 1.1rem; color: var(--text-muted); max-width: 600px;
+    margin-bottom: 38px; line-height: 1.85;
+    animation: fadeUp 0.7s var(--ease) 0.2s both;
+  }
+  .hero .subtitle strong { color: #b0d4f0; font-weight: 600; }
+  .hero-buttons {
+    display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+    animation: fadeUp 0.7s var(--ease) 0.3s both;
+  }
+  .hero .version {
+    margin-top: 22px; font-size: 0.82rem; color: var(--text-dim);
+    animation: fadeUp 0.7s var(--ease) 0.4s both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ========== Buttons ========== */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 15px 34px; border-radius: 28px; font-size: 1rem; font-weight: 620;
+    text-decoration: none; cursor: pointer; border: none;
+    transition: all 0.3s var(--ease); position: relative; overflow: hidden;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #2eb8ff, #1a8fd4);
+    color: #fff; box-shadow: 0 4px 22px rgba(46,184,255,0.28);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(46,184,255,0.42);
+  }
+  .btn-primary:active { transform: translateY(1px) scale(0.97); transition: transform 0.08s; }
+  .btn-primary::after {
+    content: ''; position: absolute; top: -60%; left: -100%;
+    width: 60%; height: 220%; background: rgba(255,255,255,0.14);
+    transform: skewX(-20deg); transition: left 0.5s ease; pointer-events: none;
+  }
+  .btn-primary:hover::after { left: 140%; }
+  .btn-outline {
+    background: transparent; color: var(--blue);
+    border: 1.5px solid rgba(46,184,255,0.3);
+  }
+  .btn-outline:hover {
+    background: var(--blue-dim); border-color: rgba(46,184,255,0.55);
+    transform: translateY(-1px);
+  }
+
+  /* ========== Section ========== */
+  section { padding: var(--section-gap) 0; position: relative; z-index: 2; }
+
+  /* ========== Cards ========== */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 22px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--blue-border);
+    border-radius: var(--radius); padding: 32px 28px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: transform 0.3s var(--ease), border-color 0.3s, box-shadow 0.3s;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: var(--blue-border-hover);
+    box-shadow: 0 8px 30px rgba(46,184,255,0.05);
+  }
+  .card .icon { font-size: 2rem; margin-bottom: 14px; display: block; }
+  .card h3 { font-size: 1.05rem; color: #d0dce8; margin-bottom: 8px; font-weight: 680; }
+  .card p { font-size: 0.9rem; color: var(--text-muted); line-height: 1.65; }
+
+  /* ========== Install Steps ========== */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 26px;
+  }
+  .step {
+    background: var(--bg-card);
+    border: 1px solid var(--blue-border);
+    border-radius: var(--radius); padding: 36px 24px; text-align: center;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: transform 0.3s var(--ease), border-color 0.3s;
+  }
+  .step:hover { transform: translateY(-3px); border-color: var(--blue-border-hover); }
+  .step .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(46,184,255,0.1); color: var(--blue);
+    font-size: 1.2rem; font-weight: 700; margin-bottom: 16px;
+  }
+  .step h4 { color: #d0dce8; margin-bottom: 8px; font-size: 1rem; font-weight: 680; }
+  .step p { color: var(--text-muted); font-size: 0.88rem; }
+
+  /* ========== Tech Tags ========== */
+  .tag-cloud { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .tag {
+    display: inline-block; padding: 8px 20px; border-radius: 6px;
+    background: rgba(46,184,255,0.05); border: 1px solid rgba(46,184,255,0.1);
+    color: var(--text-muted); font-size: 0.88rem; transition: all 0.2s;
+  }
+  .tag:hover { background: rgba(46,184,255,0.12); border-color: rgba(46,184,255,0.25); color: var(--blue); }
+
+  /* ========== FAQ ========== */
+  .faq-list { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .faq-item {
+    background: var(--bg-card);
+    border: 1px solid var(--blue-border);
+    border-radius: 10px; overflow: hidden;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: border-color 0.25s;
+  }
+  .faq-item.open { border-color: var(--blue-border-hover); }
+  .faq-q {
+    width: 100%; background: none; border: none; color: #c8d6e5;
+    padding: 17px 22px; text-align: left; font-size: 0.94rem; font-weight: 540;
+    cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    font-family: inherit; gap: 12px;
+  }
+  .faq-q .arrow { font-size: 0.65rem; color: var(--text-dim); transition: transform 0.25s; flex-shrink: 0; }
+  .faq-item.open .faq-q .arrow { transform: rotate(180deg); color: var(--blue); }
+  .faq-a {
+    max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease;
+    font-size: 0.88rem; color: var(--text-muted); line-height: 1.7;
+  }
+  .faq-a-inner { padding: 2px 22px 20px; }
+  .faq-item.open .faq-a { max-height: 300px; }
+
+  /* ========== CTA ========== */
+  .cta {
+    text-align: center;
+    background: linear-gradient(135deg, rgba(46,184,255,0.08), rgba(255,140,66,0.05));
+    border: 1px solid var(--blue-border);
+    border-radius: var(--radius); padding: 52px 28px; margin-top: 20px;
+  }
+  .cta h2 { font-size: 1.6rem; color: #e2eaf4; margin-bottom: 10px; }
+  .cta p { color: var(--text-muted); margin-bottom: 24px; }
+  .cta .sub { margin-top: 16px; font-size: 0.85rem; color: var(--text-dim); }
+
+  /* ========== Footer ========== */
+  footer {
+    position: relative; z-index: 2;
+    text-align: center; padding: 36px 24px;
+    border-top: 1px solid var(--blue-border);
+  }
+  footer .copy { font-size: 0.84rem; color: var(--text-dim); }
+  footer .copy a { color: var(--blue); text-decoration: none; transition: color 0.2s; }
+  footer .copy a:hover { color: #7cd0ff; }
+  footer .wechat { margin-top: 10px; font-size: 0.84rem; color: var(--text-muted); }
+  footer .wechat span { color: var(--orange); font-weight: 600; }
+
+  /* ========== Scroll Reveal ========== */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* ========== Responsive ========== */
+  @media (max-width: 700px) {
+    :root { --section-gap: 56px; }
+    .hero h1 { font-size: 2rem; }
+    .hero .subtitle { font-size: 0.98rem; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient glows -->
+<div class="ambient ambient-top" aria-hidden="true"></div>
+<div class="ambient ambient-bot" aria-hidden="true"></div>
+
+<!-- ===== NAV ===== -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">Arknights code</a>
+    <div class="nav-links">
+      <a href="#features">特性</a>
+      <a href="#install">安装</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://pan.quark.cn/s/36a0bc9eb03b" class="nav-dl" target="_blank" rel="noopener">下载</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="badge">明日方舟 × AI TERMINAL</div>
+  <h1>Arknights code</h1>
+  <p class="subtitle">
+    一个自带<strong>完整 Galgame 界面</strong>的桌面 AI Agent<br>
+    以明日方舟<strong>阿米娅</strong>等干员为主题形象，将 Claude Code CLI<br>
+    封装为<strong>沉浸式视觉小说体验</strong>
+  </p>
+  <div class="hero-buttons">
+    <a href="https://pan.quark.cn/s/36a0bc9eb03b" class="btn btn-primary" target="_blank" rel="noopener">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      下载安装器（夸克网盘）
+    </a>
+    <a href="https://github.com/fypklanfanqie/Arknightscode" class="btn btn-outline" target="_blank" rel="noopener">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+  <p class="version">最新版本 v1.6.4 · Windows 10/11 · 免费下载 · 需自备 API Key</p>
+</section>
+
+<div class="container">
+
+<!-- ===== FEATURES ===== -->
+<section id="features">
+  <span class="section-label">Features</span>
+  <h2 class="section-title">核心<span>特性</span></h2>
+  <div class="card-grid">
+    <div class="card reveal">
+      <span class="icon">🎮</span>
+      <h3>Galgame 沉浸界面</h3>
+      <p>角色立绘系统（阿米娅 / 羽毛笔等多位干员），动态位置状态机，说话者居中放大、听者侧移缩小，场景背景淡入淡出，BGM 按场景自动切换</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🗣️</span>
+      <h3>语音系统</h3>
+      <p>预生成问候语音，独立音量控制与缓存管理。打字机效果逐字渲染 Markdown + KaTeX 公式，思考气泡弹出角色风格俏皮话</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🔀</span>
+      <h3>多 LLM 后端</h3>
+      <p>一键切换 9 家 AI 供应商：DeepSeek / Anthropic / OpenRouter / 硅基流动 / 阿里百炼 / 火山方舟 / 腾讯混元 / Kimi / 百度千帆，设置面板一键填充预设</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🧙</span>
+      <h3>首次配置向导</h3>
+      <p>自动检测 Node.js / Git / Claude Code 安装状态，一键后台静默安装（可内嵌安装包），API 配置 + 连接测试一步到位</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">✏️</span>
+      <h3>角色定制系统</h3>
+      <p>内置人设 Markdown 编辑器（主设定 + 扩展设定双标签），修改角色性格、说话风格、世界观背景，保存后新会话生效</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🔄</span>
+      <h3>自动更新</h3>
+      <p>应用内检查更新 + 后台下载，NSIS 静默安装，无需手动重装。每 4 小时自动检查一次，始终保持最新版本</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">📂</span>
+      <h3>新手友好</h3>
+      <p>设置面板一键打开 Skills/插件文件夹，文件上传（50MB），快捷指令（输入 / 触发），输入框自动扩展多行，存档系统（自动 + 手动 + 多槽位）</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🎨</span>
+      <h3>明日方舟主题</h3>
+      <p>场景背景覆盖罗德岛 / 维多利亚 / 乌萨斯 / 拉特兰等，BGM 按场景自动切换，沉浸式泰拉世界体验</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== INSTALL ===== -->
+<section id="install">
+  <span class="section-label">Installation</span>
+  <h2 class="section-title">安装<span>说明</span></h2>
+  <div class="steps">
+    <div class="step reveal">
+      <div class="num">1</div>
+      <h4>下载安装器</h4>
+      <p>点击下载按钮，通过夸克网盘获取最新版 .exe 安装包（约 550MB），一键启动安装向导</p>
+    </div>
+    <div class="step reveal">
+      <div class="num">2</div>
+      <h4>自动配置环境</h4>
+      <p>安装器自动检测并安装 Node.js / Git / Claude Code，无需手动折腾开发环境</p>
+    </div>
+    <div class="step reveal">
+      <div class="num">3</div>
+      <h4>填入 API Key</h4>
+      <p>在向导中填入 LLM API Key（支持 DeepSeek 等 9 家供应商），测试连接成功后即可与阿米娅对话</p>
+    </div>
+  </div>
+  <p style="text-align:center;margin-top:30px;color:var(--text-dim);font-size:0.84rem;">
+    ⚠️ 需要自备 LLM API Key · Windows 10/11 64 位 · 安装过程需联网下载依赖
+  </p>
+</section>
+
+<!-- ===== TECH STACK ===== -->
+<section id="tech">
+  <span class="section-label">Tech Stack</span>
+  <h2 class="section-title">技术<span>栈</span></h2>
+  <div class="tag-cloud">
+    <span class="tag">Electron</span>
+    <span class="tag">Node.js</span>
+    <span class="tag">Claude Code CLI</span>
+    <span class="tag">原生 HTML/CSS/JS</span>
+    <span class="tag">marked.js</span>
+    <span class="tag">KaTeX</span>
+    <span class="tag">electron-builder</span>
+    <span class="tag">NSIS</span>
+    <span class="tag">electron-updater</span>
+    <span class="tag">DeepSeek API</span>
+    <span class="tag">多 LLM 后端</span>
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section id="faq">
+  <span class="section-label">FAQ</span>
+  <h2 class="section-title">常见<span>问题</span></h2>
+  <div class="faq-list">
+    <div class="faq-item">
+      <button class="faq-q">这个软件收费吗？<span class="arrow">▼</span></button>
+      <div class="faq-a"><div class="faq-a-inner">软件本身<strong>完全免费</strong>。但需要你自备 LLM API Key（如 DeepSeek），API 调用会产生费用（由 AI 供应商收取，与软件无关）。DeepSeek 价格很低，日常使用每月几块钱就够了。</div></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">支持哪些 AI 供应商？<span class="arrow">▼</span></button>
+      <div class="faq-a"><div class="faq-a-inner">内置 9 家供应商预设：<strong>DeepSeek、Anthropic 官方、OpenRouter、硅基流动、阿里百炼、火山引擎方舟、腾讯混元、Kimi、百度千帆</strong>。设置面板中一键切换，也可以手动填写自定义 Base URL 和模型名。</div></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">支持 macOS 吗？<span class="arrow">▼</span></button>
+      <div class="faq-a"><div class="faq-a-inner">目前仅支持 <strong>Windows 10/11 64 位</strong>。macOS 版本有计划但暂无时间表。如果你是 macOS 用户，可以从源码运行（见 <a href="https://github.com/fypklanfanqie/Arknightscode" style="color:var(--blue);">GitHub README</a>）。</div></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">角色素材来源？侵权吗？<span class="arrow">▼</span></button>
+      <div class="faq-a"><div class="faq-a-inner">角色立绘、BGM、场景背景等素材来自<strong>《明日方舟》（Arknights）</strong>，版权归<strong>鹰角网络（Hypergryph）</strong>所有，仅用于粉丝非商业用途。若权利人提出要求，将立即移除。</div></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">可以添加自定义干员吗？<span class="arrow">▼</span></button>
+      <div class="faq-a"><div class="faq-a-inner">可以！通过内置人设编辑器可以修改角色性格和说话风格。高级定制：编辑 <code>operators/</code> 目录下的 Markdown 文件来定义新干员的人设、立绘和 BGM 配置。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CHANGELOG ===== -->
+<section style="text-align:center;" id="changelog">
+  <span class="section-label">Changelog</span>
+  <h2 class="section-title">更新<span>日志</span></h2>
+  <p style="color:var(--text-muted);font-size:0.95rem;">
+    查看完整更新历史：
+    <a href="https://github.com/fypklanfanqie/Arknightscode/blob/clean-main/CHANGELOG.md" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-weight:600;">
+      CHANGELOG.md →
+    </a>
+  </p>
+</section>
+
+<!-- ===== CTA ===== -->
+<div class="cta reveal">
+  <h2>准备好与阿米娅并肩作战了吗？</h2>
+  <p>下载 Arknights code，让罗德岛的公开领袖成为你的桌面 AI 伙伴。开源免费，一键安装。</p>
+  <a href="https://pan.quark.cn/s/36a0bc9eb03b" class="btn btn-primary" target="_blank" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    下载安装器（夸克网盘）
+  </a>
+  <p class="sub">也欢迎 ⭐ Star 项目，让更多博士发现 Arknights code！</p>
+</div>
+
+</div><!-- /container -->
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <p class="copy">
+    © 2026 <a href="https://github.com/fypklanfanqie/Arknightscode" target="_blank" rel="noopener">Arknights code</a>
+    · 角色素材版权归 <a href="https://www.hypergryph.com/" target="_blank" rel="noopener">鹰角网络 (Hypergryph)</a> 所有
+    · 粉丝非商业用途
+    · <a href="https://github.com/fypklanfanqie/Arknightscode/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+  </p>
+  <p class="wechat">反馈 / 问题咨询：微信 <span>fypkLfq061218</span></p>
+</footer>
+
+<!-- ===== JS ===== -->
+<script>
+(function() {
+  'use strict';
+
+  // ── Scroll reveal ──
+  var revealEls = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+    revealEls.forEach(function(el) { obs.observe(el); });
+  } else {
+    revealEls.forEach(function(el) { el.classList.add('visible'); });
+  }
+
+  // ── Nav shadow ──
+  var nav = document.getElementById('nav');
+  var ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      requestAnimationFrame(function() {
+        nav.classList.toggle('scrolled', window.scrollY > 10);
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+
+  // ── FAQ accordion ──
+  document.querySelectorAll('.faq-q').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var item = btn.parentElement;
+      var wasOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(function(i) { i.classList.remove('open'); });
+      if (!wasOpen) item.classList.add('open');
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>

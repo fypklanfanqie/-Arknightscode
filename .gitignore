@@ -57,5 +57,4 @@ wizard_retheme.js
 *.bat
 *.json;
 
-# ===== 部署用静态站点（非源码）=====
-docs/
+# ===== 部署用静态站点（已启用 GitHub Pages）=====
