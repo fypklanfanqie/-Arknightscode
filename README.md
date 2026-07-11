@@ -1,8 +1,8 @@
 # Arknights code
 
 <p align="center">
-  <strong>一个自带完整 Galgame 界面的桌面 AI Agent</strong><br>
-  以《明日方舟》阿米娅等干员为主题形象，封装 Claude Code CLI 为沉浸式视觉小说体验
+  <strong>一个自带明日方舟界面的桌面 AI Agent</strong><br>
+  以《明日方舟》阿米娅等干员为主题形象，封装 Claude Code CLI 
 </p>
 <img width="2558" height="1365" alt="屏幕截图 2026-07-11 163621" src="https://github.com/user-attachments/assets/116fcb11-9132-45f2-9fd4-3d2bb89b3d06" />
 
@@ -17,20 +17,21 @@
 </p>
 
 ---
+<img width="2559" height="1368" alt="屏幕截图 2026-07-11 163637" src="https://github.com/user-attachments/assets/47fb4ce5-806d-45c5-8a4f-3e23dcc29597" />
+
 
 ## ✨ Features
 
 ### 🎮 Galgame 沉浸界面
-- **角色立绘系统**：阿米娅 / 羽毛笔等多名干员，丰富的 PNG 表情立绘
+- **角色立绘系统**：阿米娅 / 羽毛笔干员
 - **动态位置状态机**：说话者居中放大，听者侧移缩小，平滑过渡
 - **场景背景**：明日方舟主题场景（罗德岛 / 维多利亚 / 乌萨斯 / 拉特兰 等），淡入淡出
 - **BGM 系统**：自带120+音乐且可以接入网易云
 - **思考气泡**：AI 思考时弹出角色风格俏皮话气泡
 - **打字机效果**：逐字显示 + Markdown 渲染 + KaTeX 公式支持
+- <img width="390" height="785" alt="屏幕截图 2026-07-11 163650" src="https://github.com/user-attachments/assets/9b806b52-f0f6-4cb8-99a1-986a6f5442e4" />
 
-### 🗣️ 语音系统
-- 预生成问候语音，独立音量控制
-- 语音缓存管理
+  
 
 ### 🔀 多 LLM 后端
 一键切换 9 家 AI 供应商（DeepSeek / Anthropic / OpenRouter / 硅基流动 / 阿里百炼 / 火山方舟 / 腾讯混元 / Kimi / 百度千帆），可在设置面板中一键填充预设。
