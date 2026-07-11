@@ -2064,19 +2064,24 @@ function playBgmAt(url, label) {
 
 // ===== 音乐播放器 → BGM 同步 =====
 // 当音乐播放器开始播放时，将聊天背景音乐同步为同一曲目（循环播放）
+// 同步时将 musicAudio 静音，只让 bgmAudio 出声，避免两个音频元素同时播放造成重音
 function syncBgmFromMusic() {
   if (!musicAudio || !musicAudio.src || musicAudio.paused) return;
   const src = musicAudio.src;
   // 如果 BGM 已经在播放同一个源，不重复切换（避免重复同步导致中断）
   if (bgmAudio && bgmMusicSynced && bgmAudio.src === src && !bgmAudio.paused) return;
   bgmMusicSynced = true;
+  // 将 musicAudio 静音，实际音频输出由 bgmAudio 接管（带循环 + BGM 音量控制）
+  musicAudio.volume = 0;
   const label = currentTrack ? (currentTrack.title || currentTrack.name || '?') : '?';
   playBgmAt(src, 'music:' + label);
 }
 
-// 当音乐播放器暂停/停止时，渐出并停止 BGM
+// 当音乐播放器暂停/停止时，渐出并停止 BGM，同时恢复 musicAudio 音量
 function stopBgmFromMusic() {
   bgmMusicSynced = false;
+  // 恢复音乐播放器音量
+  if (musicAudio) musicAudio.volume = 1.0;
   if (!bgmAudio) return;
   if (bgmFadeTimer) { clearInterval(bgmFadeTimer); bgmFadeTimer = null; }
   if (bgmFadeTarget) { killAudio(bgmFadeTarget); bgmFadeTarget = null; }
