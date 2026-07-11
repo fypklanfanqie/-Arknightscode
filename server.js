@@ -35,6 +35,32 @@ const UPLOADS_DIR = path.join(__dirname, APP_DIRS.UPLOADS);
 const VOICE_DIR = path.join(__dirname, APP_DIRS.VOICE);
 
 const pendingQuestions = new Map(); // qId -> { proc, res }
+const PENDING_QUESTION_TTL = 5 * 60 * 1000; // 5分钟无响应自动清理
+
+// 带 TTL 自动清理的 pendingQuestions 操作
+function setPendingQuestion(qId, entry) {
+  entry._timer = setTimeout(() => {
+    log(`Pending question ${qId} timed out, force cleaning`);
+    pendingQuestions.delete(qId);
+  }, PENDING_QUESTION_TTL);
+  pendingQuestions.set(qId, entry);
+}
+function deletePendingQuestion(qId) {
+  const entry = pendingQuestions.get(qId);
+  if (entry && entry._timer) clearTimeout(entry._timer);
+  pendingQuestions.delete(qId);
+}
+function touchPendingQuestion(qId) {
+  // 重新计时（用户刷新了问题，延长 TTL）
+  const entry = pendingQuestions.get(qId);
+  if (entry && entry._timer) {
+    clearTimeout(entry._timer);
+    entry._timer = setTimeout(() => {
+      log(`Pending question ${qId} timed out, force cleaning`);
+      pendingQuestions.delete(qId);
+    }, PENDING_QUESTION_TTL);
+  }
+}
 const log = createLogger('server');
 const MIME = MIME_TYPES; // 向后兼容别名
 
@@ -1347,11 +1373,11 @@ function streamChat(res, prompt, sessionId, allowedTools, permissionMode) {
 
   // 注册待回答问题（供 /api/respond 使用）
   const qId = crypto.randomUUID();
-  pendingQuestions.set(qId, { proc, res, question: null });
+  setPendingQuestion(qId, { proc, res, question: null });
 
   // 客户端断开时杀死进程，防止会话锁定
   res.on('close', () => {
-    pendingQuestions.delete(qId);
+    deletePendingQuestion(qId);
     if (proc.exitCode === null) {
       log('Client disconnected, killing claude process');
       proc.kill();
@@ -1398,7 +1424,7 @@ function streamChat(res, prompt, sessionId, allowedTools, permissionMode) {
           if (question) {
             // 存储问题数据，供 /api/respond 映射答案
             const entry = pendingQuestions.get(qId);
-            if (entry) entry.question = question;
+            if (entry) { entry.question = question; touchPendingQuestion(qId); }
             writeLine(res, { type: "gallm_question", data: question });
           }
         }
@@ -1422,7 +1448,7 @@ function streamChat(res, prompt, sessionId, allowedTools, permissionMode) {
                   break; // 只处理第一个 tool_use
                 }
                 const entry = pendingQuestions.get(qId);
-                if (entry) entry.question = question;
+                if (entry) { entry.question = question; touchPendingQuestion(qId); }
                 writeLine(res, { type: "gallm_question", data: question });
                 break; // 只处理第一个 tool_use
               }
@@ -1443,6 +1469,7 @@ function streamChat(res, prompt, sessionId, allowedTools, permissionMode) {
   });
 
   proc.on("close", (code) => {
+    deletePendingQuestion(qId); // 进程退出时清理，防止内存泄漏
     if (stdoutBuf.trim()) {
       try {
         const msg = JSON.parse(stdoutBuf.trim());
