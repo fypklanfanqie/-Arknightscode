@@ -1792,6 +1792,7 @@ let bgmMuted = false;          // 是否静音
 let currentBgmTrack = null;    // 当前播放的曲目文件名
 let bgmFadeTimer = null;       // 正在运行的 fade-in/out interval ID
 let bgmFadeTarget = null;      // 当前 fade 操作的目标 Audio（用于清理）
+let bgmMusicSynced = false;    // BGM 是否由音乐播放器同步而来（音乐播放器播放时 BGM 跟随，暂停时无 BGM）
 
 // 从 localStorage 恢复音量设置
 (function() {
@@ -1966,6 +1967,8 @@ function setupAudioUnlock() {
 
 function initBgm() {
   stopBgmCleanup();  // 先彻底清理旧状态
+  // 如果音乐播放器正在播放，BGM 由同步系统接管，不启动场景 BGM
+  if (musicAudio && !musicAudio.paused && musicAudio.src) return;
   // 优先使用用户设定的「聊天背景音乐」预设
   if (bgmPreset) {
     getPlayUrl(bgmPreset).then(url => {
@@ -1989,6 +1992,8 @@ function initBgm() {
 function switchBgm(bgPath) {
   // 用户已设定聊天背景音乐预设时，忽略按场景自动切换的 BGM
   if (bgmPreset) return;
+  // 音乐播放器正在播放时，BGM 由同步系统接管，不切换场景 BGM
+  if (bgmMusicSynced && musicAudio && !musicAudio.paused && musicAudio.src) return;
   const filename = bgPath.replace(/^.*[\\/]/, "");
   const track = SCENE_BGM[filename] || SCENE_BGM["_default"];
   if (!track || track === currentBgmTrack) return;
@@ -2054,6 +2059,34 @@ function playBgmAt(url, label) {
   bgmFadeTimer = setInterval(() => {
     if (vol < target - 0.02) { vol += 0.02; newAudio.volume = Math.min(vol, target); }
     else { newAudio.volume = target; clearInterval(bgmFadeTimer); bgmFadeTimer = null; bgmFadeTarget = null; }
+  }, 50);
+}
+
+// ===== 音乐播放器 → BGM 同步 =====
+// 当音乐播放器开始播放时，将聊天背景音乐同步为同一曲目（循环播放）
+function syncBgmFromMusic() {
+  if (!musicAudio || !musicAudio.src || musicAudio.paused) return;
+  const src = musicAudio.src;
+  // 如果 BGM 已经在播放同一个源，不重复切换（避免重复同步导致中断）
+  if (bgmAudio && bgmMusicSynced && bgmAudio.src === src && !bgmAudio.paused) return;
+  bgmMusicSynced = true;
+  const label = currentTrack ? (currentTrack.title || currentTrack.name || '?') : '?';
+  playBgmAt(src, 'music:' + label);
+}
+
+// 当音乐播放器暂停/停止时，渐出并停止 BGM
+function stopBgmFromMusic() {
+  bgmMusicSynced = false;
+  if (!bgmAudio) return;
+  if (bgmFadeTimer) { clearInterval(bgmFadeTimer); bgmFadeTimer = null; }
+  if (bgmFadeTarget) { killAudio(bgmFadeTarget); bgmFadeTarget = null; }
+  const old = bgmAudio;
+  bgmAudio = null;
+  currentBgmTrack = null;
+  let v = old.volume;
+  const fadeOut = setInterval(() => {
+    if (v > 0.03) { v -= 0.03; old.volume = Math.max(0, v); }
+    else { clearInterval(fadeOut); killAudio(old); }
   }, 50);
 }
 
@@ -4620,6 +4653,9 @@ function initMusicPlayer() {
     const code = musicAudio.error ? musicAudio.error.code : '?';
     showToast('音频加载失败（代码 ' + code + '），请检查网络或尝试其他曲目');
   });
+  // BGM 同步：音乐播放器播放/暂停时，聊天背景音乐同步跟随
+  musicAudio.addEventListener('play', syncBgmFromMusic);
+  musicAudio.addEventListener('pause', stopBgmFromMusic);
   loadMusicLibrary();
   loadFavorites();
   loadLocalMusic();
@@ -4865,6 +4901,8 @@ function updateBgmPresetUI() {
 }
 async function applyBgmPreset() {
   if (!bgmPreset) return;
+  // 音乐播放器正在播放时，BGM 由同步系统接管，不应用预设
+  if (musicAudio && !musicAudio.paused && musicAudio.src) return;
   const url = await getPlayUrl(bgmPreset);
   if (!url) { showToast('预设曲目暂无法播放，请换一首'); return; }
   playBgmAt(proxyIfNeeded(url), 'preset:' + bgmPreset.title);
