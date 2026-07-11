@@ -1,0 +1,61 @@
+# ===== 敏感信息（绝对禁止提交）=====
+mako-settings.json
+.claude/
+*.session.md
+
+# ===== 用户数据 =====
+saves/
+uploads/
+voice-data/
+
+# ===== 依赖 / 运行时 / 构建产物 =====
+node_modules/
+local-electron/
+release/
+build_out/
+dist/
+build/
+*.zip
+*.blockmap
+
+# ===== 日志与临时文件 =====
+*.log
+.update-status.json
+build_log.txt
+probe_*.txt
+test*_out.txt
+test_ok.txt
+
+# ===== 一次性测试 / 探测脚本（保留源码型 .ps1）=====
+test*.ps1
+probe*.ps1
+prts_probe.ps1
+
+# ===== 系统文件 =====
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ===== 开发/调试临时脚本与产物（非发布所需）=====
+do_build.js
+cmdtest.txt
+cwdcheck.txt
+retry_build.js
+wait_build.js
+wait_capture.js
+check_cache.js
+amiya_html.txt
+*.session.md.bak
+capture_operators.js
+copy_portraits.js
+extract_bgm.js
+fetch-arknights-assets.ps1
+generate_operator_files.js
+nsh_retheme.js
+retheme.js
+wizard_retheme.js
+*.bat
+*.json;
+
+# ===== 部署用静态站点（非源码）=====
+docs/

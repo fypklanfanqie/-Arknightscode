@@ -1,0 +1,856 @@
+[
+  {
+    "id": "t1",
+    "title": "Rhodes Island",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/deprecated/music/beta2_180603/m_sys_title_combine.mp3",
+    "tag": "非官方·已弃用"
+  },
+  {
+    "id": "t2",
+    "title": "Rhodes Island (2nd Edition)",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_sys_title_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t3",
+    "title": "生命流",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_sys_void_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t4",
+    "title": "泛用型自动化解决方案0.3.2.9f2",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_sys_science_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t5",
+    "title": "休憩",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/obt/m_sys_shop_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t6",
+    "title": "终局抵抗者",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_victory_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t7",
+    "title": "血液",
+    "cat": "系统",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_failed_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t8",
+    "title": "逃亡 part2",
+    "cat": "主线·觉醒·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=1371760675.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t9",
+    "title": "逃亡 part2：其一",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_dia_escape_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t10",
+    "title": "执棋者之骨",
+    "cat": "主线·觉醒·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=1371760674.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t11",
+    "title": "执棋者之骨：其一",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_qiecheng_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t12",
+    "title": "灾难",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_dia_calamity_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t13",
+    "title": "行动#02",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_normal02_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t14",
+    "title": "短兵相接",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_indust_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t15",
+    "title": "病入膏肓",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_normal01_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t16",
+    "title": "盾与斧",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_normal03_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t17",
+    "title": "荒漠",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_normalbattle_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t18",
+    "title": "执棋者之骨：其二",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_qiechengimp_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t19",
+    "title": "永冻症",
+    "cat": "主线·觉醒·战斗",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_frostnova_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t20",
+    "title": "Babel",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_dia_babel_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t21",
+    "title": "人性",
+    "cat": "主线·觉醒·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=1371760677.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t22",
+    "title": "人性：其一",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_dia_darkness01_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t23",
+    "title": "人性：其二",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_dia_darkness02_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t24",
+    "title": "迷雾",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_dia_mist_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t25",
+    "title": "City",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_dia_street_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t26",
+    "title": "严峻事态",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_sys_loading_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t27",
+    "title": "如我所见",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_sys_tech_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t28",
+    "title": "旅途前方",
+    "cat": "主线·觉醒·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=1371757761.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t29",
+    "title": "旅途前方：其一",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_dia_newhope01_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t30",
+    "title": "逃亡 part2：其二",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta2_180603/m_bat_escapebattle_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t31",
+    "title": "悬锋待落",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta1_180603/m_bat_epic_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t32",
+    "title": "Loneliness",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/static/m_avg/m_avg_loneliness_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t33",
+    "title": "37℃",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/static/m_avg/m_avg_frostnovadie_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t34",
+    "title": "灿烂之路",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/a001/m_dia_path_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t35",
+    "title": "Synthetech",
+    "cat": "主线·觉醒·剧情",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_sys_lab_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t36",
+    "title": "龙门作战-凌云",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_bat_longmenbat_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t37",
+    "title": "近卫局攻坚小队",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_bat_longmenbatimp_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t38",
+    "title": "落子无悔",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/obt/m_bat_longmenbatboss_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t39",
+    "title": "来自雪原的回响",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/static/m_bat/m_bat_snowmonster_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t40",
+    "title": "尽归霜雪",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/static/m_bat/m_bat_frostnovaevolution_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t41",
+    "title": "Абсолютный нуль температуры (absolute zero)",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/static/m_bat/m_bat_frostnovaevolutionhard_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t42",
+    "title": "切尔诺伯格急行军",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act9d2d0/m_bat_kaltsitteam_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t43",
+    "title": "切尔诺伯格",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act9d2d0/m_bat_chernobog_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t44",
+    "title": "Непоколебимость (不屈)",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act9d2d0/m_bat_patriot_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t45",
+    "title": "视死如归",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act9d2d1/m_bat_patriotextra_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t46",
+    "title": "0:00:01",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_industv2_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t47",
+    "title": "迷雾重重",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_lostmemory_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t48",
+    "title": "遗忘",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_rosmontisteam_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t49",
+    "title": "盾卫之志",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_shield_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t50",
+    "title": "诉死歌者",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_mephistovariation_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t51",
+    "title": "Lullabye (Vocal + Inst. Only)",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_lullaby_combine.mp3",
+    "tag": "游戏版·Boss"
+  },
+  {
+    "id": "t52",
+    "title": "交锋",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_talulha_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t53",
+    "title": "塔露拉·雅特利亚斯",
+    "cat": "主线·幻灭·战斗",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_bat_talulhahard_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t54",
+    "title": "往事",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act9d0d0/m_avg_dignified_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t55",
+    "title": "风雨欲来",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act9d0d0/m_avg_batmeeting_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t56",
+    "title": "临阵",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act9d0d0/m_avg_exciting02_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t57",
+    "title": "阴谋",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act9d0d0/m_avg_plot_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t58",
+    "title": "Requiem (Short Instrumental)",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act9d2d0/m_avg_patriot_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t59",
+    "title": "Tower Fierce",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_avg_towerfierce_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t60",
+    "title": "Wrathful Cerulean Flame",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_avg_amiyaevolution_combine_animation.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t61",
+    "title": "双龙",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_avg_doubledragons_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t62",
+    "title": "赴遥尘",
+    "cat": "主线·幻灭·剧情",
+    "url": "https://static.prts.wiki/music/music/act14d0d0/m_avg_chenandwei_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t63",
+    "title": "黯影风暴",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act22d0d0/m_bat_ghosthunter01_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t64",
+    "title": "蔓延恨意",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act22d0d0/m_bat_ghosthunter02_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t65",
+    "title": "坚墙崩毁",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act27d0d0/m_bat_shatterpoint_01_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t66",
+    "title": "日光碎屑",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act27d0d0/m_bat_shatterpoint_02_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t67",
+    "title": "军事委员会的号令",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act27d0d0/m_bat_manfri_01_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t68",
+    "title": "提卡兹之根",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act27d0d0/m_bat_manfri_02_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t69",
+    "title": "尘埃渐冷",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act32d3d0/m_bat_returntomist_01_loop.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t70",
+    "title": "荣光暗沉 (节选)",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act32d3d0/m_bat_returntomist_02_loop.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t71",
+    "title": "Wecgas fore tham Cynge, Searu fore tham Ethle (Part 1)",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act32d3d0/m_bat_stmkgt_02_combine.mp3",
+    "tag": "游戏版·Boss"
+  },
+  {
+    "id": "t72",
+    "title": "Wecgas fore tham Cynge, Searu fore tham Ethle (Part 2)",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act32d3d0/m_bat_stmkgt_01_loop.mp3",
+    "tag": "游戏版·Boss"
+  },
+  {
+    "id": "t73",
+    "title": "震破呜咽",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act37d0d0/m_bat_act37d0d0_01_loop.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t74",
+    "title": "血中之泪",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act37d0d0/m_bat_act37d0d0_02_loop.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t75",
+    "title": "生存之形",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act37d0d0/m_bat_wdslm_loop.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t76",
+    "title": "命运急湍",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act43d0/m_bat_act43d0_1_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t77",
+    "title": "生命线",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act43d0/m_bat_act43d0_2_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t78",
+    "title": "殷红君主",
+    "cat": "主线·残阳·战斗",
+    "url": "https://static.prts.wiki/music/music/act43d0/m_bat_sanguinarch_combine.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t79",
+    "title": "In Originium Covered Fields",
+    "cat": "主线·残阳·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2151081430.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t80",
+    "title": "Here Come the Exiles",
+    "cat": "主线·残阳·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2151081431.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t81",
+    "title": "Cries of the Cinderbringer",
+    "cat": "主线·残阳·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2151081432.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t82",
+    "title": "Antiphon of Agonies Old",
+    "cat": "主线·残阳·战斗",
+    "url": "https://torappu.prts.wiki/assets/audio/music/act1mainss/m_bat_sarkazkings_loop.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t83",
+    "title": "Ratio Ultima",
+    "cat": "主线·残阳·战斗",
+    "url": "https://torappu.prts.wiki/assets/audio/music/act1mainss/m_bat_theresa_loop.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t84",
+    "title": "Succession (Short Ver.) (Intro)",
+    "cat": "主线·残阳·战斗",
+    "url": "https://torappu.prts.wiki/assets/audio/music/act1mainss/m_bat_reawaken_intro.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t85",
+    "title": "Succession (Short Ver.) (Loop)",
+    "cat": "主线·残阳·战斗",
+    "url": "https://torappu.prts.wiki/assets/audio/music/act1mainss/m_bat_reawaken_loop.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t86",
+    "title": "Ghost Hunter",
+    "cat": "主线·残阳·剧情",
+    "url": "https://static.prts.wiki/music/music/avg/m_avg_ghosthunter_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t87",
+    "title": "Shatter Point",
+    "cat": "主线·残阳·剧情",
+    "url": "https://static.prts.wiki/music/music/act27d0d0/m_avg_shatterpoint_combine.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t88",
+    "title": "安宁",
+    "cat": "主线·残阳·剧情",
+    "url": "https://static.prts.wiki/music/music/avg/m_avg_calm_loop.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t89",
+    "title": "放松时刻",
+    "cat": "主线·残阳·剧情",
+    "url": "https://static.prts.wiki/music/music/avg/m_avg_normal_loop.mp3",
+    "tag": "非官方"
+  },
+  {
+    "id": "t90",
+    "title": "Merciful Broken Sun",
+    "cat": "主线·残阳·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2151083894.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t91",
+    "title": "整备",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693587204.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t92",
+    "title": "调度",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584361.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t93",
+    "title": "执此剑者",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584354.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t94",
+    "title": "奇点",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584352.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t95",
+    "title": "边界",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584353.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t96",
+    "title": "乱序",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584355.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t97",
+    "title": "临界值",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2693587199.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t98",
+    "title": "无序频谱",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2751351951.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t99",
+    "title": "ложь",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2751352677.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t100",
+    "title": "纯白礼赞",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=2751351952.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t101",
+    "title": "破缺对称",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=3376594026.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t102",
+    "title": "祭祷",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=3376593423.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t103",
+    "title": "协议空间",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=3376594027.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t104",
+    "title": "“诺言”",
+    "cat": "主线·裂变·战斗",
+    "url": "http://music.163.com/song/media/outer/url?id=3376593424.mp3",
+    "tag": "Boss"
+  },
+  {
+    "id": "t105",
+    "title": "离解复合",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2693587198.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t106",
+    "title": "交点退行",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584357.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t107",
+    "title": "承诺",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2693584356.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t108",
+    "title": "反常光谱",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2751351950.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t109",
+    "title": "树皮鞋",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2751351953.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t110",
+    "title": "冰面之下",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=2751352678.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t111",
+    "title": "Дом",
+    "cat": "主线·裂变·剧情",
+    "url": "https://torappu.prts.wiki/assets/audio/music/act4mainss/m_sys_act4mainss_loop.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t112",
+    "title": "厨房谈话",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=3376594028.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t113",
+    "title": "永恒之春",
+    "cat": "主线·裂变·剧情",
+    "url": "http://music.163.com/song/media/outer/url?id=3376593425.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t114",
+    "title": "旅途前方：其二",
+    "cat": "干员密录",
+    "url": "https://static.prts.wiki/music/music/beta3_181101/m_dia_newhope02_combine.mp3",
+    "tag": "游戏版"
+  },
+  {
+    "id": "t115",
+    "title": "Loyal to the Beat",
+    "cat": "四月辑录",
+    "url": "https://static.prts.wiki/music/music/act17d7d0/m_bat_emperor_combine.wav",
+    "tag": ""
+  },
+  {
+    "id": "t116",
+    "title": "8-bit弹雨与断罪之拳",
+    "cat": "四月辑录",
+    "url": "https://static.prts.wiki/music/music/act3fun/m_bat_act3fun_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t117",
+    "title": "冉冉升起，直播新星",
+    "cat": "四月辑录",
+    "url": "https://static.prts.wiki/music/music/act4fun/m_sys_act4fun_combine.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t118",
+    "title": "ALL!!!",
+    "cat": "四月辑录",
+    "url": "https://static.prts.wiki/music/music/act5un/m_sys_act5fun_loop.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t119",
+    "title": "(Re)union stream",
+    "cat": "四月辑录",
+    "url": "http://music.163.com/song/media/outer/url?id=2689100947.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t120",
+    "title": "Tower Attack!",
+    "cat": "四月辑录",
+    "url": "http://music.163.com/song/media/outer/url?id=2689100948.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t121",
+    "title": "博士VS博士？",
+    "cat": "四月辑录",
+    "url": "http://music.163.com/song/media/outer/url?id=3364938484.mp3",
+    "tag": ""
+  },
+  {
+    "id": "t122",
+    "title": "TOO EASY",
+    "cat": "四月辑录",
+    "url": "http://music.163.com/song/media/outer/url?id=3364938485.mp3",
+    "tag": ""
+  }
+]

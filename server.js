@@ -1,0 +1,1659 @@
+/**
+ * MakoCode 后端服务器 (Node.js)
+ * 通过 shell 启动 claude 命令（与终端完全一致），NDJSON 流式传输给前端。
+ * 零外部依赖，仅使用 Node.js 内置模块。
+ *
+ * 用法: node server.js [端口号，默认8080]
+ *
+ * 模块化：共享常量 → lib/constants.js | 工具函数 → lib/utils.js
+ *         设置管理 → lib/settings.js | 安装逻辑 → lib/installer.js
+ */
+const http = require("http");
+const { spawn } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const { Readable } = require("stream");
+
+// ─── 导入共享模块 ──────────────────────────────────────
+const {
+  DEFAULT_PORT, RECENT_HISTORY_WINDOW, HISTORY_PREVIEW_LENGTH, MAX_UPLOAD_SIZE,
+  MIME_TYPES, APP_DIRS, SETTINGS_ALLOWED_KEYS,
+} = require('./lib/constants');
+const {
+  createLogger, modelLabel, isUserSpeaker, safeSessionId,
+  filterAllowedKeys, writeNDJsonLine, jsonError, ndjsonError, maskApiKey,
+} = require('./lib/utils');
+const settings = require('./lib/settings');
+const llmPresets = require('./lib/llm-presets');
+const installer = require('./lib/installer');
+
+// ─── 常量 ──────────────────────────────────────────────
+const PORT = parseInt(process.argv[2]) || DEFAULT_PORT;
+const SAVES_DIR = path.join(__dirname, APP_DIRS.SAVES);
+const UPLOADS_DIR = path.join(__dirname, APP_DIRS.UPLOADS);
+const VOICE_DIR = path.join(__dirname, APP_DIRS.VOICE);
+
+const pendingQuestions = new Map(); // qId -> { proc, res }
+const log = createLogger('server');
+const MIME = MIME_TYPES; // 向后兼容别名
+
+// ─── 可对话干员（动态人设）──────────────────────────
+const OPERATORS_DIR = path.join(__dirname, 'operators');
+
+// ─── 音乐播放器 ──────────────────────────────────────
+// 本地音乐与收藏数据存放在用户数据目录下（与 Electron 主进程一致）
+const MUSIC_DIR = process.env.ARKCODE_USERDATA
+  ? path.join(process.env.ARKCODE_USERDATA, 'arkcode-music')
+  : path.join(__dirname, 'music-data');
+const MUSIC_LIB_FILE = path.join(__dirname, 'music-library.json');
+const FAV_FILE = path.join(MUSIC_DIR, 'favorites.json');
+const LOCAL_META_FILE = path.join(MUSIC_DIR, 'local-meta.json');
+
+function ensureMusicDir() {
+  try { if (!fs.existsSync(MUSIC_DIR)) fs.mkdirSync(MUSIC_DIR, { recursive: true }); } catch {}
+}
+function readFavorites() {
+  try {
+    if (fs.existsSync(FAV_FILE)) return JSON.parse(fs.readFileSync(FAV_FILE, 'utf8'));
+  } catch {}
+  return [];
+}
+function writeFavorites(arr) {
+  ensureMusicDir();
+  try { fs.writeFileSync(FAV_FILE, JSON.stringify(arr), 'utf8'); } catch (e) { log('fav save err: ' + e.message); }
+}
+function readLocalMeta() {
+  try {
+    if (fs.existsSync(LOCAL_META_FILE)) return JSON.parse(fs.readFileSync(LOCAL_META_FILE, 'utf8'));
+  } catch {}
+  return {};
+}
+function writeLocalMeta(obj) {
+  ensureMusicDir();
+  try { fs.writeFileSync(LOCAL_META_FILE, JSON.stringify(obj), 'utf8'); } catch {}
+}
+
+// 远程音频代理：服务端拉取网易云 / PRTS 等外链并以同源返回，
+// 规避浏览器跨域限制与网易云对 Referer/UA 的校验，保证在线播放可用。
+async function handleMusicProxy(req, res, url) {
+  const target = url.searchParams.get('url') || '';
+  let parsed;
+  try { parsed = new URL(target); } catch { res.writeHead(400); res.end('Bad url'); return; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') { res.writeHead(400); res.end('Bad protocol'); return; }
+  const host = parsed.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+    res.writeHead(400); res.end('Bad host'); return;
+  }
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': parsed.origin + '/',
+    'Accept': '*/*',
+  };
+  const range = req.headers['range'];
+  if (range) headers['Range'] = range;
+  try {
+    const r = await fetch(target, { headers, redirect: 'follow' });
+    if (!r.ok && r.status !== 206) {
+      res.writeHead(r.status || 502);
+      res.end('Upstream error: ' + r.status);
+      return;
+    }
+    const out = {
+      'Content-Type': r.headers.get('content-type') || 'audio/mpeg',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+    };
+    const cl = r.headers.get('content-length');
+    if (cl) out['Content-Length'] = cl;
+    const cr = r.headers.get('content-range');
+    if (cr) out['Content-Range'] = cr;
+    res.writeHead(r.status, out);
+    if (r.body) {
+      const nodeStream = Readable.fromWeb(r.body);
+      nodeStream.on('error', () => { try { res.destroy(); } catch {} });
+      nodeStream.pipe(res);
+    } else {
+      res.end(Buffer.from(await r.arrayBuffer()));
+    }
+  } catch (e) {
+    if (!res.headersSent) res.writeHead(502);
+    res.end('Proxy error: ' + e.message);
+  }
+}
+// ── 网易云音乐（非官方）接口代理 ──
+function neteaseHeaders() {
+  const csrf = Math.random().toString(36).slice(2, 12);
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://music.163.com/',
+    'Cookie': `_ntes_nuid=${csrf}; _csrf=${csrf}`,
+    'Accept': 'application/json, text/plain, */*',
+  };
+}
+async function neteaseGet(apiPath, params) {
+  const u = new URL('https://music.163.com' + apiPath);
+  Object.keys(params).forEach(k => u.searchParams.set(k, params[k]));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch(u.toString(), { headers: neteaseHeaders(), redirect: 'follow', signal: ctrl.signal });
+    if (!r.ok) throw new Error('upstream ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+async function neteasePost(apiPath, params) {
+  const body = new URLSearchParams();
+  Object.keys(params).forEach(k => body.set(k, params[k]));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch('https://music.163.com' + apiPath, {
+      method: 'POST',
+      headers: Object.assign(neteaseHeaders(), { 'Content-Type': 'application/x-www-form-urlencoded' }),
+      body: body.toString(),
+      redirect: 'follow',
+      signal: ctrl.signal
+    });
+    if (!r.ok) throw new Error('upstream ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+function musicJson(res, obj) {
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+}
+
+// 搜索：/api/music/search?q=关键词
+async function handleMusicSearch(res, url) {
+  const q = (url.searchParams.get('q') || '').trim();
+  if (!q) { musicJson(res, { songs: [] }); return; }
+  try {
+    const data = await neteaseGet('/api/cloudsearch/pc', { s: q, type: '1', limit: '20', offset: '0' });
+    const songs = ((data && data.result && data.result.songs) || []).map(s => ({
+      id: String(s.id),
+      name: s.name || '',
+      artist: (s.ar || s.artists || []).map(a => a.name).filter(Boolean).join(' / '),
+      album: (s.al && s.al.name) ? s.al.name : ((s.album && s.album.name) ? s.album.name : ''),
+      picUrl: (s.al && s.al.picUrl) ? s.al.picUrl : ((s.album && s.album.picUrl) ? s.album.picUrl : ''),
+      duration: s.duration ? Math.round(s.duration / 1000) : Math.round((s.dt || 0) / 1000),
+    }));
+    musicJson(res, { songs });
+  } catch (e) { musicJson(res, { songs: [], error: String(e.message || e) }); }
+}
+
+// 直链：/api/music/url?id=歌曲ID
+async function handleMusicUrl(res, url) {
+  const id = url.searchParams.get('id') || '';
+  if (!id) { musicJson(res, { url: '' }); return; }
+  try {
+    const data = await neteasePost('/api/song/enhance/player/url', { ids: JSON.stringify([id]), br: '320000' });
+    const item = data && data.data && data.data[0];
+    musicJson(res, { url: item && item.url ? item.url : '' });
+  } catch (e) { musicJson(res, { url: '', error: String(e.message || e) }); }
+}
+
+// 歌词：/api/music/lyrics?id=歌曲ID
+async function handleMusicLyrics(res, url) {
+  const id = url.searchParams.get('id') || '';
+  if (!id) { musicJson(res, { lrc: '', tlyric: '' }); return; }
+  try {
+    const data = await neteaseGet('/api/song/lyric', { id, lv: '1', kv: '1', tv: '-1' });
+    const lrc = (data && data.lrc && data.lrc.lyric) || '';
+    const tlyric = (data && data.tlyric && data.tlyric.lyric) || '';
+    musicJson(res, { lrc, tlyric });
+  } catch (e) { musicJson(res, { lrc: '', tlyric: '', error: String(e.message || e) }); }
+}
+
+// 读取内置音乐库（带缓存）
+let _libCache = null;
+function loadMusicLibrary() {
+  if (_libCache) return _libCache;
+  try {
+    if (fs.existsSync(MUSIC_LIB_FILE)) _libCache = JSON.parse(fs.readFileSync(MUSIC_LIB_FILE, 'utf8'));
+  } catch (e) { log('music lib load err: ' + e.message); }
+  if (!_libCache) _libCache = [];
+  return _libCache;
+}
+
+
+// 列出 operators/ 下的可用干员（去重 .md 文件名）
+function listOperators() {
+  try {
+    return fs.readdirSync(OPERATORS_DIR)
+      .filter(f => f.endsWith('.md') && f !== 'active.json')
+      .map(f => f.replace(/\.md$/, ''));
+  } catch {
+    return [];
+  }
+}
+
+// 读取当前激活干员：优先级 env(ARKCODE_ACTIVE_OPERATOR) > operators/active.json > 第一个可用干员
+function loadActiveOperator() {
+  const valid = listOperators();
+  const envOp = process.env.ARKCODE_ACTIVE_OPERATOR;
+  if (envOp && valid.includes(envOp)) return envOp;
+  try {
+    const f = path.join(OPERATORS_DIR, 'active.json');
+    if (fs.existsSync(f)) {
+      const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (d.active && valid.includes(d.active)) return d.active;
+    }
+  } catch {}
+  return valid[0] || '阿米娅';
+}
+
+let ACTIVE_OPERATOR = loadActiveOperator();
+
+function operatorPersonaFile() {
+  return path.join(OPERATORS_DIR, `${ACTIVE_OPERATOR}.md`);
+}
+
+// 安全工具列表：在 default/plan 模式下自动允许，不弹权限窗口
+const SAFE_TOOLS = new Set([
+  'Read', 'Glob', 'Grep', 'TaskList', 'TaskGet',
+  'WebSearch', 'WebFetch',
+  'Skill', 'CronList',
+  'mcp__playwright__browser_snapshot', 'mcp__playwright__browser_navigate',
+  'mcp__playwright__browser_console_messages',
+]);
+
+// ─── 设置初始化 ─────────────────────────────────────────
+settings.load(__dirname);
+// 向后兼容：暴露 currentModel 变量（其他代码直接引用）
+let currentModel = settings.getCurrentModel();
+let currentModelMode = 'flash'; // 追踪用户选择的模式标签，独立于模型字符串
+let permissionMode = 'default'; // 权限模式：default/acceptEdits/plan/bypass
+// 启动时根据当前模型判断初始模式
+(function initModelMode() {
+  const flashModel = process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash';
+  const proModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'deepseek-v4-pro';
+  if (currentModel === proModel && currentModel !== flashModel) {
+    currentModelMode = 'pro';
+  }
+})();
+// 向后兼容函数别名
+function buildEnv() { return settings.buildEnv(); }
+function loadMakoSettings() { settings.load(__dirname); currentModel = settings.getCurrentModel(); }
+function saveMakoSettings(s) { return settings.save(__dirname, s); }
+
+// 确保目录存在
+function ensureAppDirs() {
+  const dirs = [SAVES_DIR, UPLOADS_DIR, VOICE_DIR];
+  dirs.forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
+}
+ensureAppDirs();
+
+// ─── 存档 API ────────────────────────────────────────
+function listSaves(res) {
+  fs.readdir(SAVES_DIR, (err, files) => {
+    if (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "读取存档目录失败" }));
+      return;
+    }
+    const saves = [];
+    let pending = files.filter(f => f.endsWith(".json")).length;
+    if (pending === 0) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([]));
+      return;
+    }
+    files.filter(f => f.endsWith(".json")).forEach(file => {
+      fs.readFile(path.join(SAVES_DIR, file), "utf8", (err, data) => {
+        pending--;
+        if (!err) {
+          try {
+            const save = JSON.parse(data);
+            saves.push({
+              id: save.id,
+              title: save.title || "无标题",
+              createdAt: save.createdAt,
+              updatedAt: save.updatedAt,
+              messageCount: (save.history || []).length,
+            });
+          } catch {}
+        }
+        if (pending === 0) {
+          saves.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(saves));
+        }
+      });
+    });
+  });
+}
+
+function loadSave(res, id) {
+  const filePath = path.join(SAVES_DIR, `${id}.json`);
+  fs.readFile(filePath, "utf8", (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: "存档不存在" }));
+      return;
+    }
+    try {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(data);
+    } catch {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "存档损坏" }));
+    }
+  });
+}
+
+function saveGame(res, data) {
+  if (!data.id) {
+    res.writeHead(400);
+    res.end(JSON.stringify({ error: "缺少存档 ID" }));
+    return;
+  }
+  const filePath = path.join(SAVES_DIR, `${data.id}.json`);
+  const saveData = {
+    ...data,
+    updatedAt: new Date().toISOString(),
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+  fs.writeFile(filePath, JSON.stringify(saveData, null, 2), "utf8", (err) => {
+    if (err) {
+      log(`Save error: ${err.message}`);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "保存失败" }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  });
+}
+
+function deleteSave(res, id) {
+  const filePath = path.join(SAVES_DIR, `${id}.json`);
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: "存档不存在" }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  });
+}
+
+// ─── HTTP 服务器 ─────────────────────────────────────
+const server = http.createServer((req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", `http://127.0.0.1:${PORT}`);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+
+  // ── GET / HEAD ──
+  if (req.method === "GET" || req.method === "HEAD") {
+    const isHead = req.method === "HEAD";
+    // 快捷指令列表
+    if (url.pathname === "/api/commands") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(getCommands()));
+      return;
+    }
+
+    // LLM 供应商预设列表
+    if (url.pathname === "/api/llm-presets") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(llmPresets.getAllPresets()));
+      return;
+    }
+
+    // 健康检查
+    if (url.pathname === "/api/projects" || url.pathname === "/api/projects/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ projects: [] }));
+      return;
+    }
+
+    // 读取当前模型
+    if (url.pathname === "/api/model") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ model: currentModel, label: currentModelMode === 'pro' ? 'Pro' : 'Flash' }));
+      return;
+    }
+
+    // 读取茉子设置
+    if (url.pathname === "/api/mako-settings") {
+      const safe = settings.getAll(true); // true = 脱敏 API Key
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(safe));
+      return;
+    }
+
+    // 列出存档
+    if (url.pathname === "/api/saves") {
+      listSaves(res);
+      return;
+    }
+
+    // 加载存档 /api/saves/:id
+    const saveMatch = url.pathname.match(/^\/api\/saves\/([a-zA-Z0-9_-]+)$/);
+    if (saveMatch) {
+      loadSave(res, saveMatch[1]);
+      return;
+    }
+
+    // 版本信息
+    if (url.pathname === "/api/version") {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ version: pkg.version || '1.0.0' }));
+      } catch {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ version: '1.0.0' }));
+      }
+      return;
+    }
+
+    // 打开 skills 文件夹（浏览器模式回退）
+    if (url.pathname === "/api/open-skills-folder") {
+      const skillsDir = path.join(require('os').homedir(), '.claude', 'skills');
+      try {
+        if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+        const { exec } = require('child_process');
+        exec(`explorer.exe "${skillsDir}"`, (err) => {
+          if (err) log(`open-skills-folder error: ${err.message}`);
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, path: skillsDir }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // 打开 plugins 文件夹（浏览器模式回退）
+    if (url.pathname === "/api/open-plugins-folder") {
+      const pluginsDir = path.join(require('os').homedir(), '.claude', 'plugins');
+      try {
+        if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
+        const { exec } = require('child_process');
+        exec(`explorer.exe "${pluginsDir}"`, (err) => {
+          if (err) log(`open-plugins-folder error: ${err.message}`);
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, path: pluginsDir }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // 读取当前激活干员 + 可选干员列表
+    if (url.pathname === "/api/operator") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, active: ACTIVE_OPERATOR, operators: listOperators() }));
+      return;
+    }
+
+    // 读取干员人设（operators/<激活干员>.md + 可选扩展设定）
+    if (url.pathname === "/api/persona") {
+      const personaFile = operatorPersonaFile();
+      const loreFile = path.join(OPERATORS_DIR, `${ACTIVE_OPERATOR}_lore.md`);
+      try {
+        const result = {};
+        if (fs.existsSync(personaFile)) result.persona = fs.readFileSync(personaFile, 'utf8');
+        if (fs.existsSync(loreFile)) result.lore = fs.readFileSync(loreFile, 'utf8');
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, operator: ACTIVE_OPERATOR, ...result }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // 获取已保存的语音文件 /api/voice/:voiceId
+    const voiceMatch = url.pathname.match(/^\/api\/voice\/([a-zA-Z0-9_-]+)$/);
+    if (voiceMatch) {
+      const voiceFile = path.join(VOICE_DIR, `${voiceMatch[1]}.wav`);
+      fs.readFile(voiceFile, (err, data) => {
+        if (err) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "语音文件不存在" }));
+          return;
+        }
+        res.writeHead(200, {
+          "Content-Type": "audio/wav",
+          "Cache-Control": "public, max-age=31536000",
+          "Content-Length": data.length,
+        });
+        res.end(data);
+      });
+      return;
+    }
+
+    // ── 音乐：内置曲库 ──
+    if (url.pathname === "/api/music/library") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, tracks: loadMusicLibrary() }));
+      return;
+    }
+
+    // ── 音乐：收藏列表 ──
+    if (url.pathname === "/api/music/favorites") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, favorites: readFavorites() }));
+      return;
+    }
+
+    // ── 音乐：本地音乐列表 ──
+    if (url.pathname === "/api/music/local") {
+      ensureMusicDir();
+      const AUDIO_EXT = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac'];
+      let files = [];
+      try {
+        files = fs.readdirSync(MUSIC_DIR).filter(f => {
+          const ext = path.extname(f).toLowerCase();
+          return AUDIO_EXT.includes(ext) && f !== 'favorites.json' && f !== 'local-meta.json';
+        });
+      } catch {}
+      const meta = readLocalMeta();
+      const base = `http://127.0.0.1:${PORT}`;
+      const list = files.map(f => ({
+        name: f,
+        title: meta[f] || f.replace(/\.[^.]+$/, ''),
+        url: `${base}/api/music/file?name=${encodeURIComponent(f)}`,
+      })).sort((a, b) => a.title.localeCompare(b.title, 'zh'));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, tracks: list }));
+      return;
+    }
+
+    // ── 音乐：本地文件流（防目录穿越）──
+    if (url.pathname === "/api/music/file") {
+      const name = url.searchParams.get('name') || '';
+      if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) {
+        res.writeHead(400); res.end('Bad name'); return;
+      }
+      const full = path.join(MUSIC_DIR, name);
+      if (!fs.existsSync(full)) { res.writeHead(404); res.end('Not Found'); return; }
+      const ext = path.extname(full).toLowerCase();
+      const CT = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.flac': 'audio/flac', '.m4a': 'audio/mp4', '.aac': 'audio/aac' }[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': CT, 'Accept-Ranges': 'bytes' });
+      fs.createReadStream(full).pipe(res);
+      return;
+    }
+
+    // ── 音乐：远程音频代理（绕过浏览器跨域 / 网易云 Referer 限制）──
+    if (url.pathname === "/api/music/proxy") {
+      handleMusicProxy(req, res, url);
+      return;
+    }
+
+    // ── 音乐：网易云搜索 / 直链 / 歌词 ──
+    if (url.pathname === "/api/music/search") { handleMusicSearch(res, url); return; }
+    if (url.pathname === "/api/music/url") { handleMusicUrl(res, url); return; }
+    if (url.pathname === "/api/music/lyrics") { handleMusicLyrics(res, url); return; }
+
+    // 静态文件 — 用 decodeURIComponent 解码路径（处理日文文件名）
+    let rawPath = (req.url || "/").split("?")[0].split("#")[0];
+    let filePath;
+    try { filePath = decodeURIComponent(rawPath); }
+    catch (e) { res.writeHead(400); res.end("Bad Request"); return; }
+    if (filePath === "/") filePath = "/galchat.html";
+    let safePath = path.normalize(filePath).replace(/^[/\\]+/, "");
+    if (safePath.includes("..")) { res.writeHead(403); res.end("Forbidden"); return; }
+
+    const fullPath = path.join(__dirname, safePath);
+    // 真实路径包含校验：path.normalize 可能已把 ../ 抵消（如 /a/../b），
+    // 必须确认解析后的真实路径仍位于应用目录内，否则仍有穿越风险
+    const resolvedRoot = path.resolve(__dirname);
+    const resolvedFull = path.resolve(fullPath);
+    if (resolvedFull !== resolvedRoot && !resolvedFull.startsWith(resolvedRoot + path.sep)) {
+      res.writeHead(403); res.end("Forbidden"); return;
+    }
+    // 禁止通过 HTTP 泄露敏感文件（API Key / 用户配置 / 更新状态）
+    const SENSITIVE_FILES = ['mako-settings.json', 'claude.md', '.update-status.json'];
+    if (SENSITIVE_FILES.includes(path.basename(fullPath).toLowerCase()) ||
+        fullPath.split(path.sep).includes('.claude')) {
+      res.writeHead(403); res.end("Forbidden"); return;
+    }
+    fs.readFile(fullPath, (err, data) => {
+      if (err) {
+        if (err.code === 'ENOENT') log(`404: ${safePath} → ${fullPath}`);
+        res.writeHead(404); res.end("Not Found"); return;
+      }
+      const ext = path.extname(fullPath).toLowerCase();
+      res.writeHead(200, {
+        "Content-Type": MIME[ext] || "application/octet-stream",
+        "Content-Length": data.length,
+        "Cache-Control": "no-cache",
+      });
+      res.end(isHead ? undefined : data);
+    });
+    return;
+  }
+
+  // ── POST ──
+  if (req.method === "POST") {
+    // TTS 语音（打包版：仅返回预生成问候语音文件，不调用 GPT-SoVITS）
+    if (url.pathname === "/api/tts") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { text } = JSON.parse(body);
+          if (!text) { jsonError(res, "缺少 text 参数"); return; }
+          // 尝试匹配预生成语音（assets/voice/greet_NN.wav）
+          const greetMatch = text.match(/greet_(\d{2})\.wav$/);
+          let voicePath = null;
+          if (greetMatch) {
+            voicePath = path.join(__dirname, "assets", "voice", `greet_${greetMatch[1]}.wav`);
+          }
+          // 也检查 voice-data 缓存目录
+          if (!voicePath || !fs.existsSync(voicePath)) {
+            const cachePath = path.join(VOICE_DIR, `${crypto.createHash("md5").update(text).digest("hex").substring(0, 7)}.wav`);
+            if (fs.existsSync(cachePath)) voicePath = cachePath;
+          }
+          if (voicePath && fs.existsSync(voicePath)) {
+            const stat = fs.statSync(voicePath);
+            res.writeHead(200, {
+              "Content-Type": "audio/wav",
+              "Content-Length": stat.size,
+              "Cache-Control": "public, max-age=3600",
+            });
+            fs.createReadStream(voicePath).pipe(res);
+          } else {
+            // 无预生成语音 → 返回 404（前端静默处理）
+            res.writeHead(404);
+            res.end("No pre-generated voice available");
+          }
+        } catch { jsonError(res, "JSON 格式错误"); }
+      });
+      return;
+    }
+
+    // 聊天
+    if (url.pathname === "/api/chat") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { message, sessionId, allowedTools, permissionMode: reqPermMode, uploadedFiles, history } = JSON.parse(body);
+          const effectivePermMode = (reqPermMode && reqPermMode !== 'default') ? reqPermMode : permissionMode;
+          let prompt = (message || "").trim();
+
+          // ═══════════════════════════════════════════════════════
+          // Token 优化: 分层历史注入
+          // 原因: --session-id 在 spawn/kill 循环中不可靠，必须手动维护上下文
+          // 策略: 最近 10 轮原文 + 10 轮以前压缩为摘要（不丢记忆，但省 token）
+          // ═══════════════════════════════════════════════════════
+          if (history && history.length > 0) {
+            const RECENT_WINDOW = 10; // 保留最近 N 轮完整对话
+            const OP_LABEL = ACTIVE_OPERATOR; // 当前激活干员名
+            if (history.length <= RECENT_WINDOW) {
+              // 短对话：全部保留原文
+              const historyCtx = history.map(h => {
+                const isUser = h.speaker === '博士' || h.speaker === '用户' || h.speaker === '玩家';
+                return isUser ? `博士：${h.text}` : `${OP_LABEL}：${h.text}`;
+              }).join('\n');
+              prompt = `以下是你（${OP_LABEL}）与博士之前的对话记录，请记住这些上下文，继续保持角色：\n\n${historyCtx}\n\n---\n博士刚刚说：${prompt}`;
+            } else {
+              // 长对话：最近 10 轮原文 + 早期压缩
+              const oldHistory = history.slice(0, -RECENT_WINDOW);
+              const recentHistory = history.slice(-RECENT_WINDOW);
+              // 压缩早期对话为简短摘要（减少 token，但不丢话题脉络）
+              const oldSummary = oldHistory.map(h => {
+                const isUser = h.speaker === '博士' || h.speaker === '用户' || h.speaker === '玩家';
+                const preview = h.text.length > 60 ? h.text.substring(0, 60) + '…' : h.text;
+                return isUser ? `博士说了：「${preview}」` : `${OP_LABEL}回应了：「${preview}」`;
+              }).join('\n');
+              const recentCtx = recentHistory.map(h => {
+                const isUser = h.speaker === '博士' || h.speaker === '用户' || h.speaker === '玩家';
+                return isUser ? `博士：${h.text}` : `${OP_LABEL}：${h.text}`;
+              }).join('\n');
+              prompt = `以下是你（${OP_LABEL}）与博士之前的对话记录。\n\n【早期对话摘要】\n${oldSummary}\n\n【最近对话（请重点记住）】\n${recentCtx}\n\n---\n博士刚刚说：${prompt}`;
+            }
+          }
+          // 模型切换指令：/model flash 或 /model pro
+          const modelMatch = prompt.match(/^\/model\s+(pro|flash)$/i);
+          if (modelMatch) {
+            const target = modelMatch[1].toLowerCase();
+            const flashModel = process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash';
+            const proModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'deepseek-v4-pro';
+            currentModel = target === 'pro' ? proModel : flashModel;
+            currentModelMode = target === 'pro' ? 'pro' : 'flash';
+            log(`Model switched to: ${currentModel} (via chat command)`);
+            res.writeHead(200, {
+              "Content-Type": "application/x-ndjson",
+              "Cache-Control": "no-cache",
+            });
+            writeLine(res, { type: 'claude_json', data: {
+              type: 'assistant', message: { content: [{ type: 'text', text: `🔀 模型已切换至 **${modelLabel(currentModel)}**，下条消息生效。` }] }
+            }});
+            writeLine(res, { type: 'done' });
+            res.end();
+            return;
+          }
+          // ═══════════════════════════════════════════════════════
+          // 干员人设注入：新会话（history为空）时加载 operators/<激活干员>.md
+          // 原因: --input-format stream-json + sdk-ts 模式下 claude.exe 不会自动读取人设文件
+          // 策略: 仅在首条消息注入，后续复用 session 上下文以节省 token
+          // ═══════════════════════════════════════════════════════
+          if (!history || history.length === 0) {
+            try {
+              const personaFile = operatorPersonaFile();
+              if (fs.existsSync(personaFile)) {
+                let content = fs.readFileSync(personaFile, 'utf8').trim();
+                if (content) {
+                  prompt = content + '\n\n---\n\n' + prompt;
+                  log(`Persona injected [${ACTIVE_OPERATOR}] (${(prompt.length / 1024).toFixed(1)}KB, new session)`);
+                }
+              } else {
+                log(`Persona file not found: ${personaFile}`);
+              }
+            } catch (e) {
+              log(`Failed to load persona: ${e.message}`);
+            }
+          }
+
+          // 如果有上传文件，在 prompt 中附加文件路径信息
+          if (uploadedFiles && uploadedFiles.length > 0) {
+            const fileList = uploadedFiles.map(f => `- ${f.path}`).join('\n');
+            prompt = `${prompt}\n\n[用户上传了以下文件，请先使用 Read 工具逐个读取所有文件的内容，再根据文件内容回答用户的问题：]\n${fileList}`;
+          }
+          if (!prompt) {
+            endWithError(res, "消息内容为空");
+            return;
+          }
+          log(`Chat: ${prompt.substring(0, 120)}...`);
+          // 注入当前权限模式，让茉子知道自己所处的模式
+          const modeLabels = { default: '默认模式（每步操作都需要确认）', acceptEdits: '编辑模式（文件读写自动通过，Shell仍需确认）', plan: '计划模式（纯只读，不能修改文件）', bypass: '自动模式（完全自主执行所有操作）' };
+          prompt = prompt + '\n\n[系统提示：当前会话运行在「' + (modeLabels[effectivePermMode] || effectivePermMode) + '」。]';
+          res.writeHead(200, {
+            "Content-Type": "application/x-ndjson",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          });
+          streamChat(res, prompt, sessionId, allowedTools, effectivePermMode);
+        } catch (e) {
+          log(`Parse error: ${e.message}`);
+          endWithError(res, "请求体 JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 问题回答
+    if (url.pathname === "/api/respond") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { qId, answer } = JSON.parse(body);
+          const entry = pendingQuestions.get(qId);
+          if (entry && entry.proc.exitCode === null) {
+            // 将前端传来的 1-based 索引映射为选项的实际值
+            const idx = parseInt(answer) - 1;
+            const question = entry.question;
+            let answerValue = answer; // 默认直接用前端传的值
+            if (question && question.optionsRaw && idx >= 0 && idx < question.optionsRaw.length) {
+              const rawOpt = question.optionsRaw[idx];
+              // rawOpt 可能是 {label, value} 对象，也可能是字符串
+              if (typeof rawOpt === 'object' && rawOpt !== null && rawOpt.value) {
+                answerValue = rawOpt.value;
+              } else if (typeof rawOpt === 'string') {
+                answerValue = rawOpt;
+              }
+            }
+            log(`Question answered: idx=${idx}, value="${answerValue}" (raw=${answer})`);
+            // 以 stream-json 用户消息格式写回 stdin，Claude 读取作为权限回答
+            const respMsg = JSON.stringify({ type: "user", message: { role: "user", content: answerValue } });
+            entry.proc.stdin.write(respMsg + "\n");
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+          } else {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "question not found or process ended" }));
+          }
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 切换模型
+    if (url.pathname === "/api/model") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { model } = JSON.parse(body);
+          const flashModel = process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash';
+          const proModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'deepseek-v4-pro';
+          if (model === "flash" || model === flashModel) {
+            currentModel = flashModel;
+            currentModelMode = 'flash';
+          } else if (model === "pro" || model === proModel) {
+            currentModel = proModel;
+            currentModelMode = 'pro';
+          } else {
+            jsonError(res, "未知模型，可选 flash / pro");
+            return;
+          }
+          log(`Model switched to: ${currentModel}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ model: currentModel, label: currentModelMode === 'pro' ? 'Pro' : 'Flash' }));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 切换权限模式
+    if (url.pathname === "/api/mode") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { mode } = JSON.parse(body);
+          if (!["default", "acceptEdits", "plan", "bypass"].includes(mode)) {
+            jsonError(res, "无效模式，可选 default/acceptEdits/plan/bypass");
+            return;
+          }
+          permissionMode = mode;
+          log(`Permission mode set to: ${permissionMode}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ mode: permissionMode }));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 切换激活干员（持久化到 operators/active.json）
+    if (url.pathname === "/api/operator") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { operator } = JSON.parse(body);
+          const valid = listOperators();
+          if (!operator || !valid.includes(operator)) {
+            jsonError(res, "未知干员，可选：" + valid.join(" / "));
+            return;
+          }
+          ACTIVE_OPERATOR = operator;
+          try {
+            if (!fs.existsSync(OPERATORS_DIR)) fs.mkdirSync(OPERATORS_DIR, { recursive: true });
+            fs.writeFileSync(path.join(OPERATORS_DIR, 'active.json'), JSON.stringify({ active: operator }, null, 2), 'utf8');
+          } catch (e) {
+            log(`Failed to persist active operator: ${e.message}`);
+          }
+          log(`Active operator set to: ${operator}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, active: ACTIVE_OPERATOR }));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 收藏/取消收藏音乐（body: {id, fav}）
+    if (url.pathname === "/api/music/favorite") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { id, fav } = JSON.parse(body);
+          if (!id) { jsonError(res, "缺少 id"); return; }
+          const favs = readFavorites();
+          const idx = favs.indexOf(id);
+          if (fav) { if (idx === -1) favs.push(id); }
+          else { if (idx !== -1) favs.splice(idx, 1); }
+          writeFavorites(favs);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, favorites: favs }));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 更新本地音乐标题（body: {name, title}）
+    if (url.pathname === "/api/music/local-meta") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { name, title } = JSON.parse(body);
+          if (!name) { jsonError(res, "缺少 name"); return; }
+          const meta = readLocalMeta();
+          if (title === undefined || title === null || title === '') delete meta[name];
+          else meta[name] = String(title);
+          writeLocalMeta(meta);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 保存干员人设（operators/<激活干员>.md + 可选扩展设定）
+
+    if (url.pathname === "/api/persona") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { persona, lore } = JSON.parse(body);
+          const personaFile = operatorPersonaFile();
+          const loreFile = path.join(OPERATORS_DIR, `${ACTIVE_OPERATOR}_lore.md`);
+          let saved = false;
+          if (persona !== undefined && persona !== null) {
+            const personaDir = path.dirname(personaFile);
+            if (!fs.existsSync(personaDir)) fs.mkdirSync(personaDir, { recursive: true });
+            fs.writeFileSync(personaFile, persona, 'utf8');
+            saved = true;
+          }
+          if (lore !== undefined && lore !== null) {
+            const loreDir = path.dirname(loreFile);
+            if (!fs.existsSync(loreDir)) fs.mkdirSync(loreDir, { recursive: true });
+            fs.writeFileSync(loreFile, lore, 'utf8');
+            saved = true;
+          }
+          log(`Persona files saved [${ACTIVE_OPERATOR}]`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          log(`Persona save error: ${e.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // 保存茉子设置
+    if (url.pathname === "/api/mako-settings") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const settings = JSON.parse(body);
+          // 只允许白名单中的字段
+          const allowed = [
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_MODEL",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+            "CLAUDE_CODE_SUBAGENT_MODEL",
+            "CLAUDE_CODE_EFFORT_LEVEL",
+          ];
+          const filtered = {};
+          for (const key of allowed) {
+            if (settings[key] !== undefined) {
+              filtered[key] = String(settings[key]).trim();
+            }
+          }
+          if (saveMakoSettings(filtered)) {
+            // 如果修改了 ANTHROPIC_MODEL，同步更新 currentModel
+            if (filtered.ANTHROPIC_MODEL) {
+              currentModel = filtered.ANTHROPIC_MODEL;
+              log(`currentModel synced from settings: ${currentModel}`);
+              const proModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'deepseek-v4-pro';
+              const flashModel = process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash';
+              if (currentModel === proModel && currentModel !== flashModel) {
+                currentModelMode = 'pro';
+              } else {
+                currentModelMode = 'flash';
+              }
+            }
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, model: currentModel, label: modelLabel(currentModel) }));
+          } else {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "保存失败" }));
+          }
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // 结束游戏（关闭服务器）
+    if (url.pathname === "/api/quit") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      log("Quit requested — shutting down in 1s...");
+      setTimeout(() => process.exit(0), 1000);
+      return;
+    }
+
+    // 更新状态（从 .update-status.json 读取，由 Electron 主进程写入）
+    if (url.pathname === "/api/update/status") {
+      const updateFile = path.join(__dirname, '.update-status.json');
+      try {
+        if (fs.existsSync(updateFile)) {
+          const data = JSON.parse(fs.readFileSync(updateFile, 'utf8'));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(data));
+        } else {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ state: 'idle', version: null, progress: 0, error: null }));
+        }
+      } catch {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ state: 'idle' }));
+      }
+      return;
+    }
+
+    // 文件上传
+    if (url.pathname === "/api/upload") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          handleUpload(res, JSON.parse(body));
+        } catch {
+          jsonError(res, "JSON 格式错误");
+        }
+      });
+      return;
+    }
+
+    // ── 首次配置向导 API ──
+
+    // 检查命令是否存在
+    if (url.pathname === "/api/check-command") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { command } = JSON.parse(body);
+          // 使用 where 命令检查（Windows）
+          const check = spawn("cmd.exe", ["/d", "/c", "where", command || "", "2>nul"]);
+          let out = "";
+          check.stdout.on("data", (d) => (out += d.toString()));
+          check.on("close", (code) => {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ found: code === 0, command }));
+          });
+        } catch { jsonError(res, "JSON 格式错误"); }
+      });
+      return;
+    }
+
+    // 安装 Claude Code
+    if (url.pathname === "/api/install-claude-code") {
+      req.on("data", () => {});
+      req.on("end", () => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        const install = spawn("cmd.exe", ["/d", "/c", "npm", "install", "-g", "@anthropic-ai/claude-code"], {
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        let out = "", err = "";
+        install.stdout.on("data", (d) => (out += d.toString()));
+        install.stderr.on("data", (d) => (err += d.toString()));
+        install.on("close", (code) => {
+          res.end(JSON.stringify({ ok: code === 0, output: out + err }));
+        });
+        install.on("error", (e) => {
+          res.end(JSON.stringify({ ok: false, output: e.message }));
+        });
+      });
+      return;
+    }
+
+    // 后台静默安装 Node.js / Git（从 bundled-tools 嵌入包）
+    if (url.pathname === "/api/install-tools") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { tools } = JSON.parse(body); // tools: ["node", "git"]
+          if (!tools || !Array.isArray(tools) || tools.length === 0) {
+            jsonError(res, "缺少 tools 参数");
+            return;
+          }
+          res.writeHead(200, {
+            "Content-Type": "application/x-ndjson",
+            "Cache-Control": "no-cache",
+          });
+          installer.installToolsStreaming(res, __dirname, tools);
+        } catch { jsonError(res, "JSON 格式错误"); }
+      });
+      return;
+    }
+    if (url.pathname === "/api/save-settings") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const settings = JSON.parse(body);
+          const allowed = [
+            "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL",
+          ];
+          const filtered = {};
+          for (const key of allowed) {
+            if (settings[key] !== undefined) {
+              filtered[key] = String(settings[key]).trim();
+            }
+          }
+          const ok = saveMakoSettings(filtered);
+          if (filtered.ANTHROPIC_MODEL) {
+            currentModel = filtered.ANTHROPIC_MODEL;
+            const proModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'deepseek-v4-pro';
+            const flashModel = process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash';
+            if (currentModel === proModel && currentModel !== flashModel) {
+              currentModelMode = 'pro';
+            } else {
+              currentModelMode = 'flash';
+            }
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok }));
+        } catch { jsonError(res, "JSON 格式错误"); }
+      });
+      return;
+    }
+
+    // 测试 API 连接
+    if (url.pathname === "/api/test-connection") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const { endpoint, key, model } = JSON.parse(body);
+          let baseUrl = (endpoint || "https://api.deepseek.com").replace(/\/+$/, "");
+          // 去掉 /anthropic 后缀 — Claude Code 用兼容端点，但测试必须用 OpenAI 原生 /v1/chat/completions
+          const apiBase = baseUrl.replace(/\/anthropic\/?$/, '');
+          const testUrl = `${apiBase}/v1/chat/completions`;
+          const postData = JSON.stringify({
+            model: model || "deepseek-chat",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 5,
+          });
+
+          const https = require("https");
+          const httpMod = require("http");
+          const mod = testUrl.startsWith("https") ? https : httpMod;
+          const req2 = mod.request(testUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${key}`,
+              "Content-Length": Buffer.byteLength(postData),
+            },
+            timeout: 15000,
+          }, (apiRes) => {
+            let data2 = "";
+            apiRes.on("data", (d) => (data2 += d));
+            apiRes.on("end", () => {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              if (apiRes.statusCode === 200) {
+                res.end(JSON.stringify({ ok: true, message: "API 连接正常！茉子可以正常运转啦～" }));
+              } else {
+                let errMsg = `HTTP ${apiRes.statusCode}`;
+                try {
+                  const errJson = JSON.parse(data2);
+                  if (errJson.error?.message) errMsg = errJson.error.message;
+                } catch {}
+                res.end(JSON.stringify({ ok: false, message: errMsg }));
+              }
+            });
+          });
+          req2.on("error", (e) => {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, message: `连接失败：${e.message}` }));
+          });
+          req2.on("timeout", () => {
+            req2.destroy();
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, message: "连接超时，请检查 API 地址是否正确" }));
+          });
+          req2.write(postData);
+          req2.end();
+        } catch (e) {
+          jsonError(res, e.message);
+        }
+      });
+      return;
+    }
+
+    // 标记首次配置完成
+    if (url.pathname === "/api/finish-setup") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        // 默认保留所有安装包（安全默认值），只有用户明确取消勾选才删除
+        let keepTools = ["node", "git"];
+        try {
+          const parsed = JSON.parse(body || "{}");
+          if (Array.isArray(parsed.keepTools)) {
+            keepTools = parsed.keepTools;
+          }
+        } catch {}
+        // 清理未勾选的安装包
+        installer.cleanupBundledTools(__dirname, keepTools);
+        // 在 mako-settings.json 中写入标记
+        settings.save(__dirname, { SETUP_COMPLETE: "true" });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+
+    // 保存存档
+    if (url.pathname === "/api/saves") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try { saveGame(res, JSON.parse(body)); }
+        catch { jsonError(res, "JSON 格式错误"); }
+      });
+      return;
+    }
+  }
+
+  // ── DELETE ──
+  if (req.method === "DELETE") {
+    const delMatch = url.pathname.match(/^\/api\/saves\/([a-zA-Z0-9_-]+)$/);
+    if (delMatch) {
+      deleteSave(res, delMatch[1]);
+      return;
+    }
+  }
+
+  res.writeHead(404);
+  res.end("Not Found");
+});
+
+// ─── 单次对话（--print 模式）─────────────────────────
+function streamChat(res, prompt, sessionId, allowedTools, permissionMode) {
+  const env = buildEnv();
+  const args = ["--output-format", "stream-json", "--verbose", "--input-format", "stream-json"];
+
+  if (sessionId) {
+    args.push("--session-id", sessionId);
+  }
+
+  if (allowedTools && allowedTools.length > 0) {
+    args.push("--allowedTools", allowedTools.join(","));
+  }
+
+  if (permissionMode && permissionMode !== "default") {
+    // MakoCode 的 bypass → Claude CLI 的 bypassPermissions，其余直接通过
+    const CLI_MODE_MAP = { bypass: 'bypassPermissions' };
+    const cliMode = CLI_MODE_MAP[permissionMode] || permissionMode;
+    args.push("--permission-mode", cliMode);
+  }
+
+  // --model 显式指定模型，优先级高于 settings.json 的 env.ANTHROPIC_MODEL
+  args.push("--model", currentModel);
+  args.push("--print");
+
+  // --settings 覆盖 ~/.claude/settings.json 中的 env，防止全局配置覆盖 MakoCode 的自定义模型设置
+  const envOverrides = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value != null && (key.startsWith('ANTHROPIC_') || key.startsWith('CLAUDE_CODE_'))) {
+      envOverrides[key] = value;
+    }
+  }
+  const overrideSettings = { env: envOverrides };
+  args.push("--settings", JSON.stringify(overrideSettings));
+  log(`[settings-override] ${JSON.stringify(overrideSettings)}`);
+
+  // Windows: spawn 无法直接运行 .cmd，需通过 cmd.exe /d /c 启动
+  // 先尝试定位 claude.exe 真实路径，找不到则通过 cmd 兜底
+  const npmDir = path.join(process.env.APPDATA || '', 'npm');
+  const claudeExe = path.join(npmDir, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+  let claudeCmd, claudeArgs;
+  if (fs.existsSync(claudeExe)) {
+    // 直接调用 claude.exe（安全，不用 shell）
+    claudeCmd = claudeExe;
+    claudeArgs = args;
+  } else {
+    // 回退：通过 cmd.exe /d /c 调用 claude（保证 .cmd 能执行）
+    claudeCmd = 'cmd.exe';
+    claudeArgs = ['/d', '/c', 'claude', ...args];
+  }
+
+  log(`Spawning: ${claudeCmd} ${claudeArgs.join(" ")} (prompt via stdin, ${prompt.length} chars)`);
+
+  const proc = spawn(claudeCmd, claudeArgs, {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  // 注册待回答问题（供 /api/respond 使用）
+  const qId = crypto.randomUUID();
+  pendingQuestions.set(qId, { proc, res, question: null });
+
+  // 客户端断开时杀死进程，防止会话锁定
+  res.on('close', () => {
+    pendingQuestions.delete(qId);
+    if (proc.exitCode === null) {
+      log('Client disconnected, killing claude process');
+      proc.kill();
+    }
+  });
+
+  // 发送 question ID 给前端（用于回答时关联）
+  writeLine(res, { type: "gallm_init", qId });
+
+  // 通过 stdin 发送 stream-json 格式的 prompt，不关闭 stdin（权限答案需回写）
+  const stdinMsg = JSON.stringify({ type: "user", message: { role: "user", content: prompt } });
+  proc.stdin.write(stdinMsg + "\n");
+  // ⚠️ 不调用 proc.stdin.end() —— stdin 保持打开以接收权限问题的答案
+
+  let lineCount = 0;
+  let stderrData = "";
+  let resultReceived = false;
+
+  let stdoutBuf = "";
+  proc.stdout.on("data", (data) => {
+    stdoutBuf += data.toString("utf8");
+    const lines = stdoutBuf.split("\n");
+    stdoutBuf = lines.pop() || "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      lineCount++;
+      try {
+        const msg = JSON.parse(trimmed);
+        writeLine(res, { type: "claude_json", data: msg });
+
+        // 检测 result 消息 — Claude 完成本轮处理后关闭 stdin 让其退出
+        if (msg.type === 'result') {
+          resultReceived = true;
+          if (!proc.stdin.destroyed) {
+            proc.stdin.end();
+          }
+        }
+
+        // 检测系统级问题/权限提示
+        if (msg.type === 'system' && msg.subtype !== 'init') {
+          const question = detectQuestion(msg);
+          if (question) {
+            // 存储问题数据，供 /api/respond 映射答案
+            const entry = pendingQuestions.get(qId);
+            if (entry) entry.question = question;
+            writeLine(res, { type: "gallm_question", data: question });
+          }
+        }
+
+        // 检测 assistant 消息中的 tool_use — 捕获工具调用权限请求
+        if (msg.type === 'assistant' && msg.message?.content && Array.isArray(msg.message.content)) {
+          for (const block of msg.message.content) {
+            if (block.type === 'tool_use') {
+              const question = detectQuestion({
+                type: 'assistant',
+                message: { type: 'tool_use', name: block.name }
+              });
+              if (question) {
+                // 自动允许 SAFE_TOOLS，不弹权限窗口
+                if (question.autoAllow) {
+                  const entry = pendingQuestions.get(qId);
+                  if (entry) {
+                    const respMsg = JSON.stringify({ type: "user", message: { role: "user", content: question.answer || 'yes' } });
+                    entry.proc.stdin.write(respMsg + "\n");
+                  }
+                  break; // 只处理第一个 tool_use
+                }
+                const entry = pendingQuestions.get(qId);
+                if (entry) entry.question = question;
+                writeLine(res, { type: "gallm_question", data: question });
+                break; // 只处理第一个 tool_use
+              }
+            }
+          }
+        }
+      } catch {
+        log(`Non-JSON: ${trimmed.substring(0, 200)}`);
+        writeLine(res, { type: "raw", data: trimmed });
+      }
+    }
+  });
+
+  proc.stderr.on("data", (data) => {
+    const str = data.toString("utf8");
+    stderrData += str;
+    process.stderr.write(str);  // 同步打到 go.bat 窗口
+  });
+
+  proc.on("close", (code) => {
+    if (stdoutBuf.trim()) {
+      try {
+        const msg = JSON.parse(stdoutBuf.trim());
+        writeLine(res, { type: "claude_json", data: msg });
+        lineCount++;
+      } catch {}
+    }
+
+    if (stderrData) {
+      log(`Claude stderr:\n${stderrData}`);
+      writeLine(res, { type: "stderr", data: stderrData });
+    }
+
+    log(`Process exited code=${code}, lines=${lineCount}`);
+
+    if (lineCount === 0 && code !== 0) {
+      const sessionInUse = stderrData && stderrData.includes('already in use');
+      writeLine(res, {
+        type: "claude_json",
+        data: {
+          type: "result",
+          subtype: "error_during_execution",
+          error: `claude exited with code ${code}` + (stderrData ? `\nstderr: ${stderrData.substring(0, 500)}` : ""),
+          sessionInUse: !!sessionInUse,
+        },
+      });
+    }
+
+    writeLine(res, { type: "done" });
+    res.end();
+  });
+
+  proc.on("error", (err) => {
+    log(`Spawn error: ${err.message}`);
+    writeLine(res, { type: "error", error: `无法启动: ${err.message}` });
+    writeLine(res, { type: "done" });
+    res.end();
+  });
+}
+
+// ─── 工具函数（从 lib/utils.js 导入，保留向后兼容别名）─────
+const writeLine = writeNDJsonLine;
+const endWithError = ndjsonError;
+// jsonError 直接从 utils 导入，已在上方解构
+
+// ─── 快捷指令列表 ──────────────────────────────────────
+const BUILTIN_COMMANDS = [
+  // 内置斜杠命令
+  { command: "/permission", description: "管理工具权限" },
+  { command: "/btw", description: "发送旁白消息，不触发AI回复" },
+  { command: "/clear", description: "清除对话历史" },
+  { command: "/config", description: "查看和修改配置" },
+  { command: "/model", description: "切换AI模型" },
+  { command: "/fast", description: "切换快速模式" },
+  { command: "/help", description: "查看帮助信息" },
+  { command: "/init", description: "初始化项目 CLAUDE.md" },
+  { command: "/review", description: "代码审查" },
+  { command: "/security-review", description: "安全审查" },
+  { command: "/simplify", description: "简化代码" },
+  { command: "/verify", description: "验证代码变更" },
+  { command: "/run", description: "启动并测试项目" },
+  { command: "/loop", description: "循环执行命令" },
+  // Skills
+  { command: "/pdf", description: "处理PDF文件" },
+  { command: "/xlsx", description: "处理Excel文件" },
+  { command: "/pptx", description: "处理PowerPoint文件" },
+  { command: "/docx", description: "处理Word文件" },
+  { command: "/code-review", description: "代码审查 (skill)" },
+  { command: "/scientific-writing", description: "科学写作辅助" },
+  { command: "/literature-review", description: "文献综述" },
+  { command: "/paper-lookup", description: "查找论文" },
+  { command: "/deep-research", description: "深度研究报告" },
+  { command: "/generate-image", description: "生成图片" },
+  { command: "/exploratory-data-analysis", description: "探索性数据分析" },
+  { command: "/statistical-analysis", description: "统计分析" },
+  { command: "/scientific-visualization", description: "科学可视化" },
+  { command: "/matplotlib", description: "Matplotlib 绘图" },
+  { command: "/seaborn", description: "Seaborn 绘图" },
+  { command: "/scikit-learn", description: "机器学习" },
+  { command: "/pytorch-lightning", description: "PyTorch Lightning" },
+  { command: "/markdown-mermaid-writing", description: "Mermaid 图表" },
+  { command: "/exa-search", description: "深度搜索" },
+];
+
+function getCommands() {
+  // 以后可以动态扫描 skills 目录来扩展
+  return BUILTIN_COMMANDS;
+}
+
+// ─── 问题检测 ──────────────────────────────────────────
+function detectQuestion(msg) {
+  // Claude Code system 消息，可能包含权限/确认提示
+  const text = msg.text || msg.prompt || msg.question || msg.message || '';
+  const rawOptions = msg.options || [];
+  if (text && rawOptions.length > 0) {
+    // 规范化选项：Claude 可能发送 [{label, value}] 或 [string]
+    // options: 显示用（字符串数组）
+    // optionsRaw: 保留原始对象，供 /api/respond 取值用
+    const options = rawOptions.map(o => typeof o === 'string' ? o : (o.label || o.value || String(o)));
+    return { text, options, optionsRaw: rawOptions };
+  }
+  // 检查 assistant 消息中的 tool_use（需要权限的）
+  if (msg.type === 'assistant' && msg.message?.type === 'tool_use') {
+    // bypass 模式：自动允许所有工具；其他模式：SAFE_TOOLS 自动允许
+    if (permissionMode === 'bypass' || SAFE_TOOLS.has(msg.message.name)) {
+      return { autoAllow: true, answer: 'yes' };
+    }
+    return {
+      text: `是否允许使用 "${msg.message.name}" 工具？`,
+      options: ['允许 (yes)', '总是允许 (yes always)', '拒绝 (no)'],
+      optionsRaw: [
+        { label: '允许 (yes)', value: 'yes' },
+        { label: '总是允许 (yes always)', value: 'yes-always' },
+        { label: '拒绝 (no)', value: 'no' },
+      ],
+    };
+  }
+  return null;
+}
+
+// ─── 文件上传 ──────────────────────────────────────────
+function handleUpload(res, body) {
+  const { sessionId, files } = body;
+  if (!sessionId || !files || !Array.isArray(files) || files.length === 0) {
+    jsonError(res, "缺少 sessionId 或 files");
+    return;
+  }
+
+  // 单次上传总大小限制 50MB
+  const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+  let totalSize = 0;
+
+  // 为每个会话创建子目录
+  const sessionDir = path.join(UPLOADS_DIR, sessionId.replace(/[^a-zA-Z0-9_-]/g, "_"));
+  if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+  }
+
+  const results = [];
+  for (const f of files) {
+    if (!f.name || !f.data) continue;
+    // 安全文件名
+    const safeName = f.name.replace(/[\\/:*?"<>|]/g, "_");
+    const filePath = path.join(sessionDir, safeName);
+    try {
+      const buf = Buffer.from(f.data, "base64");
+      totalSize += buf.length;
+      if (totalSize > MAX_UPLOAD_SIZE) {
+        jsonError(res, "上传文件总大小超过 50MB 限制");
+        return;
+      }
+      fs.writeFileSync(filePath, buf);
+      results.push({ name: f.name, path: filePath, type: f.type, size: buf.length });
+      log(`Uploaded: ${filePath} (${buf.length} bytes)`);
+    } catch (e) {
+      log(`Upload error: ${e.message}`);
+    }
+  }
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, files: results }));
+}
+
+// ─── 后台静默安装 Node.js / Git ──────────────────────
+// 已提取至 lib/installer.js，通过 installer 模块调用
+// installer.installToolsStreaming(res, __dirname, tools)
+// installer.cleanupBundledTools(appDir, keepTools)
+
+// ─── 端口冲突处理 ────────────────────────────────────
+// 启动前清理残留端口（Fix B：主动释放被占用的端口）
+try {
+  require('child_process').execSync(
+    `powershell -NoProfile -Command "$p=(Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue).OwningProcess; if($p){Stop-Process -Id $p -Force}"`,
+    { stdio: 'pipe', timeout: 5000 }
+  );
+} catch (e) {}
+
+// 端口冲突错误处理：自动清理并重试（Fix A：EADDRINUSE 不崩溃）
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    log(`Port ${PORT} is in use, attempting to free it...`);
+    try {
+      require('child_process').execSync(
+        `powershell -NoProfile -Command "$p=(Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue).OwningProcess; if($p){Stop-Process -Id $p -Force}"`,
+        { stdio: 'pipe', timeout: 5000 }
+      );
+      // Retry after cleanup
+      setTimeout(() => {
+        server.close();
+        server.listen(PORT, '127.0.0.1');
+      }, 1000);
+      return;
+    } catch (e) {
+      log(`Failed to free port: ${e.message}`);
+      // 即使 PowerShell 清理失败，仍延迟重试而非直接退出
+      setTimeout(() => {
+        server.close();
+        server.listen(PORT, '127.0.0.1');
+      }, 3000);
+      return;
+    }
+  }
+  log(`Server error: ${err.message}`);
+  process.exit(1);
+});
+
+// ─── 启动 ────────────────────────────────────────────
+server.listen(PORT, "127.0.0.1", () => {
+  log("✦ MakoCode 后端已启动 ✦");
+  log(`  地址: http://127.0.0.1:${PORT}`);
+  log(`  模型: ${currentModel} (${modelLabel(currentModel)})`);
+  log(`  存档: ${SAVES_DIR}`);
+  log("");
+});

@@ -1,0 +1,110 @@
+{
+  "name": "arkcode",
+  "version": "1.6.4-2",
+  "description": "Arknights code - 明日方舟主题 Galgame AI 终端（阿米娅 / 博士）",
+  "author": "liebaojun (Arknights reskin)",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.arknights.arkcode",
+    "productName": "Arknights code",
+    "directories": {
+      "output": "build_out"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "installer-icon.ico",
+      "installerHeaderIcon": "installer-icon.ico",
+      "uninstallerIcon": "installer-icon.ico",
+      "license": "LICENSE.txt",
+      "createDesktopShortcut": true,
+      "shortcutName": "Arknights code",
+      "include": "installer.nsh"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "liebaojun",
+      "repo": "MakoCode"
+    },
+    "asar": false,
+    "electronDist": "local-electron",
+    "files": [
+      "**/*",
+      "!saves/**",
+      "!voice-data/**",
+      "!uploads/**",
+      "!dist/**",
+      "!node_modules/.cache/**",
+      "!node_modules/electron/**",
+      "!node_modules/playwright/**",
+      "!node_modules/playwright-core/**",
+      "!node_modules/@playwright/**",
+      "!node_modules/sharp/**",
+      "!node_modules/electron-builder/**",
+      "!node_modules/app-builder-lib/**",
+      "!node_modules/electron-builder-*/**",
+      "!node_modules/.bin/**",
+      "!.git/**",
+      "!.agents/**",
+      "!*.md",
+      "CLAUDE.md",
+      "!*.log",
+      "!*.bat",
+      "!*.ps1",
+      "!retheme.js",
+      "!capture_operators.js",
+      "!extract_bgm.js",
+      "!wizard_retheme.js",
+      "!nsh_retheme.js",
+      "!wait_capture.js",
+      "!wait_build.js",
+      "!mako-settings.json",
+      "!.claude/**",
+      "!installer.nsh",
+      "!package-lock.json",
+      "!start-tts.*",
+      "!agent-test.txt",
+      "!server.py",
+      "!index.html",
+      "!主界面示例.png",
+      "!LICENSE.txt",
+      "bundled-tools/**",
+      "!local-electron/**",
+      "!electron.zip",
+      "!*.txt",
+      "!docs/**",
+      "!scripts/**",
+      "!build_log.txt",
+      "!npm_install.err",
+      "!probe_*.txt",
+      "!test*_out.txt",
+      "!test_ok.txt",
+      "!test_url.ps1",
+      "!copy_portraits.js",
+      "!generate_operator_files.js",
+      "!check_cache.js",
+      "!retry_build.js",
+      "!extract_bgm.js",
+      "!fetch-arknights-assets.ps1"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.2",
+    "playwright": "^1.61.0",
+    "sharp": "^0.35.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}
