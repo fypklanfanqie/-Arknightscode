@@ -3386,8 +3386,8 @@ async function chatWithClaude(msg, files) {
   const { displayText, voiceText } = parseVoiceTag(fullText);
   // 打包版：回复不使用 TTS 语音合成，仅保留 VOICE 文字展示
 
-  // Claude 回复 → 茉子说话
-  setSpeaker('茉子');
+  // Claude 回复 → 当前干员说话
+  setSpeaker(ACTIVE_OPERATOR);
   setCharState('claude');
   startExprCycle('claude');
   typeWrite(displayText);
@@ -3395,7 +3395,7 @@ async function chatWithClaude(msg, files) {
     const check = setInterval(() => { if (!isTyping) { clearInterval(check); r(); } }, 100);
   });
 
-  history.push({ speaker: '茉子', text: displayText });
+  history.push({ speaker: ACTIVE_OPERATOR, text: displayText });
   renderHistory();
   setStatus('connected', '已连接');
 
@@ -3465,7 +3465,7 @@ function toggleHistory() {
 function renderHistory() {
   const p = document.getElementById('history-panel');
   p.innerHTML = history.map((h, i) => {
-    const cls = (h.speaker === '茉子' || h.speaker === 'Claude') ? 'claude' : 'user';
+    const cls = (h.speaker === ACTIVE_OPERATOR || h.speaker === 'Claude') ? 'claude' : 'user';
     const hasVoice = cls === 'claude' && h.voiceId;
     return `<div class="h-item ${cls}" data-idx="${i}" ${hasVoice ? `data-voice="${h.voiceId}" title="点击重播语音" style="cursor:pointer"` : ''}>
       <div class="h-name">${h.speaker}</div>${h.text}
