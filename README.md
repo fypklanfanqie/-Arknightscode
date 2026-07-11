@@ -3,7 +3,7 @@
 <p align="center">
   <strong>一个自带明日方舟界面的桌面 AI Agent</strong><br>
   以《明日方舟》阿米娅等干员为主题形象，封装 Claude Code CLI 
-  本程序是基于https://github.com/liebaojun/MakoCode这个大佬的成果，已经和作者取得联系获得授权，感谢！
+  本程序是基于https://github.com/liebaojun/MakoCode 这个大佬的成果，已经和作者取得联系获得授权，感谢！
 </p>
 <img width="2558" height="1365" alt="屏幕截图 2026-07-11 163621" src="https://github.com/user-attachments/assets/116fcb11-9132-45f2-9fd4-3d2bb89b3d06" />
 
