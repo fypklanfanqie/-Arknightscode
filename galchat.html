@@ -1791,6 +1791,7 @@ let bgmPreMuteVolume = 0.4;    // 静音前音量（恢复用）
 let bgmMuted = false;          // 是否静音
 let currentBgmTrack = null;    // 当前播放的曲目文件名
 let bgmFadeTimer = null;       // 正在运行的 fade-in/out interval ID
+let _phoneClockTimer = null;
 let bgmFadeTarget = null;      // 当前 fade 操作的目标 Audio（用于清理）
 let bgmMusicSynced = false;    // BGM 是否由音乐播放器同步而来（音乐播放器播放时 BGM 跟随，暂停时无 BGM）
 
@@ -2491,17 +2492,17 @@ function showMsg(speaker, text, showInput) {
   const who = speaker === ACTIVE_OPERATOR || speaker === 'Claude' ? 'claude' : 'user';
   setCharState(who);
   startExprCycle(who);
-  document.getElementById('loading-dots').classList.remove('show');
-  document.getElementById('input-area').classList.remove('show');
+  _el('loading-dots').classList.remove('show');
+  _el('input-area').classList.remove('show');
   // 用户消息时隐藏复制按钮（只有茉子回复才显示）
-  if (who === 'user') document.getElementById('copy-btn').style.display = 'none';
+  if (who === 'user') _el('copy-btn').style.display = 'none';
 
   typeWrite(text, () => {
     if (showInput) {
-      document.getElementById('input-area').classList.add('show');
-      document.getElementById('user-input').focus();
+      _el('input-area').classList.add('show');
+      _el('user-input').focus();
       resetInputHeight();
-      document.getElementById('volume-btn').style.display = 'block';
+      _el('volume-btn').style.display = 'block';
       updateMainVolIcon();
     }
   });
@@ -2511,14 +2512,14 @@ function showMsg(speaker, text, showInput) {
 }
 
 function showLoading() {
-  document.getElementById('dialogue-plain').style.display = 'block';
-  document.getElementById('dialogue-rendered').style.display = 'none';
-  document.getElementById('text-content').textContent = '';
-  document.getElementById('type-cursor').style.display = 'none';
-  document.getElementById('click-hint').style.display = 'none';
-  document.getElementById('copy-btn').style.display = 'none';
-  document.getElementById('loading-dots').classList.add('show');
-  document.getElementById('input-area').classList.remove('show');
+  _el('dialogue-plain').style.display = 'block';
+  _el('dialogue-rendered').style.display = 'none';
+  _el('text-content').textContent = '';
+  _el('type-cursor').style.display = 'none';
+  _el('click-hint').style.display = 'none';
+  _el('copy-btn').style.display = 'none';
+  _el('loading-dots').classList.add('show');
+  _el('input-area').classList.remove('show');
   setCharState('thinking');
   startExprCycle('thinking');
   setStatus('thinking', randomMakotoThink());
@@ -3410,7 +3411,7 @@ async function chatWithClaude(msg, files) {
   }
 
   clearThinkBubbles();
-  document.getElementById('loading-dots').classList.remove('show');
+  _el('loading-dots').classList.remove('show');
   stopExprCycle();
 
   let fullText = result.fullText, hasError = result.hasError, errorMsg = result.errorMsg;
@@ -3439,7 +3440,7 @@ async function chatWithClaude(msg, files) {
 
   // 保存当前回复文本供复制按钮使用，显示复制按钮
   lastClaudeText = displayText;
-  document.getElementById('copy-btn').style.display = 'flex';
+  _el('copy-btn').style.display = 'flex';
 
   // 检测回复中是否包含选项式问题（如 "1. xxx 2. yyy 3. zzz"）
   const textOptions = detectTextOptions(displayText);
@@ -3447,8 +3448,8 @@ async function chatWithClaude(msg, files) {
     showQuestion(textOptions.text, textOptions.options, true);
   } else {
     setTimeout(() => {
-      document.getElementById('input-area').classList.add('show');
-      document.getElementById('user-input').focus();
+      _el('input-area').classList.add('show');
+      _el('user-input').focus();
       resetInputHeight();
     }, 300);
   }
@@ -3458,11 +3459,11 @@ async function chatWithClaude(msg, files) {
 }
 
 // ===== 点击跳过打字 / 切换渲染 =====
-document.getElementById('dialogue-box').addEventListener('click', (e) => {
+_el('dialogue-box').addEventListener('click', (e) => {
   if (isTyping) {
     clearTimeout(typeTimer);
-    document.getElementById('text-content').textContent = currentText || '';
-    document.getElementById('type-cursor').style.display = 'none';
+    _el('text-content').textContent = currentText || '';
+    _el('type-cursor').style.display = 'none';
     isTyping = false;
     // 立即渲染
     renderMarkdown(currentText || '');
@@ -4115,18 +4116,16 @@ async function loadGame(saveId) {
         setCharState(who);
         startExprCycle(who);
         // 直接显示最后一条消息，不使用打字机效果
-        const plain = document.getElementById('dialogue-plain');
-        const rendered = document.getElementById('dialogue-rendered');
-        document.getElementById('text-content').textContent = last.text;
-        document.getElementById('type-cursor').style.display = 'none';
-        plain.style.display = 'block';
-        rendered.style.display = 'none';
+        _el('text-content').textContent = last.text;
+        _el('type-cursor').style.display = 'none';
+        _el('dialogue-plain').style.display = 'block';
+        _el('dialogue-rendered').style.display = 'none';
         renderMarkdown(last.text);
-        document.getElementById('click-hint').style.display = 'block';
+        _el('click-hint').style.display = 'block';
         isTyping = false;
         currentText = last.text;
-        document.getElementById('input-area').classList.add('show');
-        document.getElementById('user-input').focus();
+        _el('input-area').classList.add('show');
+        _el('user-input').focus();
         resetInputHeight();
       } else {
         // 空存档，AI 生成自然开场白
@@ -4251,15 +4250,15 @@ async function saveAndExit() {
   // 停止思考气泡
   if (thinkBubbleTimer) { clearInterval(thinkBubbleTimer); thinkBubbleTimer = null; }
   thinkContentQueue = [];
-  document.getElementById('think-bubble-layer').innerHTML = '';
+  _el('think-bubble-layer').innerHTML = '';
   // 隐藏游戏 UI 元素
-  document.getElementById('input-area').classList.remove('show');
+  _el('input-area').classList.remove('show');
   resetInputHeight();
-  document.getElementById('dialogue-plain').style.display = 'none';
-  document.getElementById('dialogue-rendered').style.display = 'none';
-  document.getElementById('click-hint').style.display = 'none';
-  document.getElementById('loading-dots').classList.remove('show');
-  document.getElementById('history-panel').classList.remove('open');
+  _el('dialogue-plain').style.display = 'none';
+  _el('dialogue-rendered').style.display = 'none';
+  _el('click-hint').style.display = 'none';
+  _el('loading-dots').classList.remove('show');
+  _el('history-panel').classList.remove('open');
   // 重置状态指示
   setStatus('disconnected', '未连接');
   // 隐藏状态栏和模式切换器（返回标题画面不应显示这些）
@@ -4645,9 +4644,23 @@ if (document.readyState === 'loading') {
   initModeSwitcher();
 }
 
+// 轻量 DOM 缓存：首次访问后缓存元素引用
+const _dom = {};
+function _el(id) { return _dom[id] || (_dom[id] = document.getElementById(id)); }
+
+// 页面卸载时清理所有定时器，防止内存泄漏
+window.addEventListener('beforeunload', () => {
+  if (thinkBubbleTimer) clearInterval(thinkBubbleTimer);
+  if (exprTimer) clearInterval(exprTimer);
+  if (yoshinoCarouselTimer) clearInterval(yoshinoCarouselTimer);
+  if (bgmFadeTimer) clearInterval(bgmFadeTimer);
+  if (_phoneClockTimer) clearInterval(_phoneClockTimer);
+});
+
 // ===== 音乐播放器逻辑 =====
 function initMusicPlayer() {
   musicAudio = document.getElementById('music-audio');
+  _cacheMusicEls(); // 预缓存音乐面板 DOM 引用
   musicAudio.addEventListener('play', () => { updatePlayStateUI(true); showMini(); updateMusicListPlaying(); });
   musicAudio.addEventListener('pause', () => { updatePlayStateUI(false); });
   musicAudio.addEventListener('timeupdate', updateMusicProgress);
@@ -4666,7 +4679,7 @@ function initMusicPlayer() {
   loadLocalMusic();
   loadBgmPreset(); // 渲染「聊天背景音乐」预设状态条
   updatePhoneClock();
-  setInterval(updatePhoneClock, 30000);
+  _phoneClockTimer = setInterval(updatePhoneClock, 30000);
 }
 
 function updatePhoneClock() {
@@ -4679,10 +4692,10 @@ function updatePhoneClock() {
 }
 
 function toggleMusicPanel() {
-  const p = document.getElementById('music-panel');
+  const p = _musicEls ? _musicEls.panel : document.getElementById('music-panel');
   if (!p) return;
   const open = p.classList.toggle('open');
-  const mini = document.getElementById('music-mini');
+  const mini = _musicEls ? _musicEls.mini : document.getElementById('music-mini');
   if (open) {
     if (mini) mini.classList.remove('show');
     if (musicTab === 'local') loadLocalMusic();
@@ -4738,22 +4751,26 @@ function getTrackId(t) {
   return t.id ? t.id : ('local:' + (t.name || t.title || ''));
 }
 
+function musicFetch(url, onData, errMsg, done) {
+  return fetch(url).then(r => r.json()).then(onData).catch(() => showToast(errMsg)).finally(done || renderMusicList);
+}
+
 function loadMusicLibrary() {
-  fetch(`${API}/api/music/library`).then(r => r.json()).then(d => {
+  musicFetch(`${API}/api/music/library`, d => {
     musicLib = (d.tracks || []).map(t => Object.assign({}, t, { kind: 'online' }));
-  }).catch(() => {}).finally(renderMusicList);
+  }, '无法加载在线曲库，服务器未就绪');
 }
 
 function loadFavorites() {
-  fetch(`${API}/api/music/favorites`).then(r => r.json()).then(d => {
+  musicFetch(`${API}/api/music/favorites`, d => {
     favSet = new Set(d.favorites || []);
-  }).catch(() => {}).finally(() => { updateNowUI(); renderMusicList(); });
+  }, '无法加载收藏列表，服务器未就绪', () => { updateNowUI(); renderMusicList(); });
 }
 
 function loadLocalMusic() {
-  fetch(`${API}/api/music/local`).then(r => r.json()).then(d => {
+  musicFetch(`${API}/api/music/local`, d => {
     musicLocal = (d.tracks || []).map(t => Object.assign({}, t, { kind: 'local', id: 'local:' + t.name, cat: '本地音乐' }));
-  }).catch(() => {}).finally(renderMusicList);
+  }, '无法加载本地音乐，服务器未就绪');
 }
 
 function currentList() {
@@ -5042,7 +5059,7 @@ function syncLyrics() {
 }
 
 function updateMusicListPlaying() {
-  const p = document.getElementById('music-panel');
+  const p = _musicEls ? _musicEls.panel : document.getElementById('music-panel');
   if (p && p.classList.contains('open') && !nowView) renderMusicList();
 }
 
@@ -5051,31 +5068,38 @@ function togglePlay() {
   if (musicAudio.paused) musicAudio.play().catch(() => {}); else musicAudio.pause();
 }
 
-function onSeek() {
+function onSeek(id) {
   if (!musicAudio.duration) return;
-  const v = parseFloat(document.getElementById('music-seek').value) / 100;
-  musicAudio.currentTime = v * musicAudio.duration;
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = parseFloat(el.value);
+  if (isNaN(v)) return;
+  musicAudio.currentTime = (v / 100) * musicAudio.duration;
 }
 
-function onNowSeek() {
-  if (!musicAudio.duration) return;
-  const v = parseFloat(document.getElementById('now-seek').value) / 100;
-  musicAudio.currentTime = v * musicAudio.duration;
+let _musicEls = null;
+function _cacheMusicEls() {
+  if (_musicEls) return;
+  _musicEls = {
+    seek: document.getElementById('music-seek'),
+    time: document.getElementById('music-time'),
+    nseek: document.getElementById('now-seek'),
+    ncur: document.getElementById('now-cur'),
+    ndur: document.getElementById('now-dur'),
+    panel: document.getElementById('music-panel'),
+    mini: document.getElementById('music-mini'),
+  };
 }
-
 function updateMusicProgress() {
   const cur = musicAudio.currentTime || 0;
   const dur = musicAudio.duration || 0;
-  const seek = document.getElementById('music-seek');
-  if (seek && dur) seek.value = (cur / dur) * 100;
-  const t = document.getElementById('music-time');
-  if (t) t.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
-  const nseek = document.getElementById('now-seek');
-  if (nseek && dur) nseek.value = (cur / dur) * 100;
-  const ncur = document.getElementById('now-cur');
-  if (ncur) ncur.textContent = fmtTime(cur);
-  const ndur = document.getElementById('now-dur');
-  if (ndur) ndur.textContent = fmtTime(dur);
+  _cacheMusicEls();
+  const els = _musicEls;
+  if (els.seek && dur) els.seek.value = (cur / dur) * 100;
+  if (els.time) els.time.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
+  if (els.nseek && dur) els.nseek.value = (cur / dur) * 100;
+  if (els.ncur) els.ncur.textContent = fmtTime(cur);
+  if (els.ndur) els.ndur.textContent = fmtTime(dur);
   syncLyrics();
 }
 
@@ -5134,7 +5158,7 @@ function toggleFav(t) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, fav })
-  }).catch(() => {});
+  }).catch(() => showToast('收藏同步失败，请检查服务是否正常'));
 }
 
 async function downloadCurrent() {
@@ -5232,7 +5256,7 @@ function importViaFileInput() {
     <div id="lyrics-box"><div id="lyrics-inner"></div></div>
     <div id="now-progress">
       <span id="now-cur">0:00</span>
-      <input id="now-seek" type="range" min="0" max="100" value="0" oninput="onNowSeek()">
+      <input id="now-seek" type="range" min="0" max="100" value="0" oninput="onSeek('now-seek')">
       <span id="now-dur">0:00</span>
     </div>
     <div id="now-controls">
@@ -5257,7 +5281,7 @@ function importViaFileInput() {
     <button id="music-mini-close" onclick="closeMiniPlayer()" title="关闭">×</button>
   </div>
   <div id="music-mini-bar">
-    <input id="music-seek" type="range" min="0" max="100" value="0" oninput="onSeek()">
+    <input id="music-seek" type="range" min="0" max="100" value="0" oninput="onSeek('music-seek')">
     <span id="music-time">0:00 / 0:00</span>
   </div>
 </div>
