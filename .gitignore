@@ -58,3 +58,18 @@ wizard_retheme.js
 *.json;
 
 # ===== 部署用静态站点（已启用 GitHub Pages）=====
+
+# ===== AI 协作工具工作区（本机专用，不进仓库）=====
+.superpowers/
+.workbuddy/
+.claude/
+
+# ===== 构建输出 =====
+build_out/
+
+# ===== mock LLM 运行时产物 =====
+tests/mock-llm/last-request.json
+tests/mock-llm/requests.jsonl.json
+tests/mock-llm/raw-requests.log
+tests/mock-llm/first-system.txt
+tests/mock-llm/second-system.txt

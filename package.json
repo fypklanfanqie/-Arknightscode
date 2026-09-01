@@ -37,7 +37,6 @@
       "repo": "MakoCode"
     },
     "asar": false,
-    "electronDist": "local-electron",
     "files": [
       "**/*",
       "!saves/**",
