@@ -2,7 +2,7 @@
   "name": "arkcode",
   "version": "1.6.4-2",
   "description": "Arknights code - 明日方舟主题 Galgame AI 终端（阿米娅 / 博士）",
-  "author": "liebaojun (Arknights reskin)",
+  "author": "fypklanfanqie (based on MakoCode by liebaojun)",
   "main": "electron-main.js",
   "scripts": {
     "start": "electron .",
@@ -33,8 +33,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "liebaojun",
-      "repo": "MakoCode"
+      "owner": "fypklanfanqie",
+      "repo": "Arknightscode"
     },
     "asar": false,
     "files": [
